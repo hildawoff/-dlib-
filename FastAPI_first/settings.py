@@ -1,0 +1,1 @@
+DB_URI = "mysql+aiomysql://root:07210721@localhost:3306/fastapi_vue3?charset=utf8mb4"
