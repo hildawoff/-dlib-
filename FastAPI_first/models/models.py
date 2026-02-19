@@ -1,6 +1,9 @@
 # 数据库模型
 from sqlalchemy import Column, Integer, String, LargeBinary
 from core.database import Base
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
+from datetime import datetime
+
 
 class Admin(Base):
     __tablename__ = "admins"
@@ -17,3 +20,14 @@ class FaceUser(Base):
     name = Column(String(50))
     email = Column(String(100))
     face_encoding = Column(LargeBinary)  # 存储128维特征
+
+
+class RecognitionLog(Base):
+    __tablename__ = "recognition_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("face_users.id"), nullable=True)
+    name = Column(String(50))
+    similarity = Column(Float)
+    status = Column(String(20))  # success / unknown
+    created_at = Column(DateTime, default=datetime.utcnow)
