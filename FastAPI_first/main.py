@@ -11,6 +11,12 @@ from models import models
 import fastapi_cdn_host
 from fastapi.middleware.cors import CORSMiddleware
 
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
+from core.config import  SECRET_KEY, ALGORITHM
+from fastapi import status
+
+
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
@@ -35,6 +41,23 @@ def get_db():
         db.close()
 
 
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401)
+        return username
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="认证失败"
+        )
+
+
+
+
 # 管理员登录
 @app.post("/login")
 def login(admin: schemas.AdminLogin, db: Session = Depends(get_db)):
@@ -55,8 +78,10 @@ def register_face(
     name: str,
     email: str,
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
 ):
+
     image_bytes = file.file.read()
     encoding = face_service.get_face_encoding(image_bytes)
 
@@ -80,7 +105,8 @@ def register_face(
 @app.post("/recognize")
 def recognize_face(
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
 ):
     image_bytes = file.file.read()
     encoding = face_service.get_face_encoding(image_bytes)
@@ -90,15 +116,54 @@ def recognize_face(
 
     users = db.query(models.FaceUser).all()
 
+    best_match = None
+    min_dist = 999
+
     for user in users:
         stored_encoding = np.frombuffer(user.face_encoding)
         dist = np.linalg.norm(stored_encoding - encoding)
 
-        if dist < 0.6:
-            return {
-                "message": "识别成功",
-                "name": user.name,
-                "similarity": float(1 - dist)
-            }
+        if dist < min_dist:
+            min_dist = dist
+            best_match = user
 
-    return {"message": "未识别到匹配人员"}
+    if min_dist < 0.6:
+        log = models.RecognitionLog(
+            user_id=best_match.id,
+            name=best_match.name,
+            similarity=float(1 - min_dist),
+            status="success"
+        )
+        db.add(log)
+        db.commit()
+
+        return {
+            "message": "识别成功",
+            "name": best_match.name,
+            "similarity": float(1 - min_dist)
+        }
+
+    else:
+        log = models.RecognitionLog(
+            name="unknown",
+            similarity=0,
+            status="unknown"
+        )
+        db.add(log)
+        db.commit()
+
+        return {"message": "未识别到匹配人员"}
+
+
+@app.get("/logs")
+def get_logs(
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user)
+):
+    logs = db.query(models.RecognitionLog).order_by(
+        models.RecognitionLog.created_at.desc()
+    ).all()
+
+    return logs
+
+
