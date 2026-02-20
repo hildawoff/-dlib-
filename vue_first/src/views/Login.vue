@@ -6,6 +6,10 @@
       <el-input v-model="password" type="password" placeholder="密码" />
       <el-button type="primary" @click="login">登录</el-button>
     </el-card>
+    <el-button type="text" @click="$router.push('/admin/register')">
+  没有账号？去注册
+    </el-button>
+    <el-button @click="logout">退出登录</el-button>
   </div>
 </template>
 
@@ -30,5 +34,9 @@ const login = async () => {
   } catch (error) {
     alert('登录失败')
   }
+}
+const logout = () => {
+  localStorage.removeItem('token')
+  router.push('/')
 }
 </script>

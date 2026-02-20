@@ -16,20 +16,24 @@ from jose import JWTError, jwt
 from core.config import  SECRET_KEY, ALGORITHM
 from fastapi import status
 
+from core.auth import hash_password
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
-fastapi_cdn_host.patch_docs(app)
+
 # uvicorn main:app --reload
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],  # 前端运行地址（精确匹配）
+    # allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],  # 允许所有请求方法（GET/POST等）
     allow_headers=["*"],  # 允许所有请求头（包括Authorization）
 )
+
+fastapi_cdn_host.patch_docs(app)
 
 
 # 数据库依赖
@@ -55,6 +59,27 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
             detail="认证失败"
         )
 
+
+
+@app.post("/admin/register")
+def register_admin(admin: schemas.AdminLogin, db: Session = Depends(get_db)):
+    existing = db.query(models.Admin).filter(
+        models.Admin.username == admin.username
+    ).first()
+
+    if existing:
+        raise HTTPException(status_code=400, detail="用户名已存在")
+
+    new_admin = models.Admin(
+        username=admin.username,
+        password=hash_password(admin.password)
+    )
+
+    db.add(new_admin)
+    db.commit()
+    db.refresh(new_admin)
+
+    return {"message": "管理员注册成功"}
 
 
 
