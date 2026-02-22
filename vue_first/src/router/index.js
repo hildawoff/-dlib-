@@ -14,14 +14,14 @@ const routes = [
     path: '/',
     component: Layout,
     children:[
-        { path: '', name: 'Home', component: Login },
+        { path: '', name: 'Home', component: Homepage },
         { path: 'register', name: 'register', component: Register },
         { path: 'recognize', name: 'recognize', component: Recognize },
         { path: 'camera', name: 'camera', component: Camera},
         { path: 'logs', name: 'logs', component: Logs},
-        { path: 'admin/register', name: 'admin', component: AdminRegister},
         { path: 'unknown-users', name: 'unknown-users', component: UnknownList},
-        { path: 'homepage', name: 'homepage', component: Homepage}
+        // { path: 'admin/register', name: 'admin', component: AdminRegister},
+        // { path: 'homepage', name: 'homepage', component: Homepage}
     ]
   }
 ]

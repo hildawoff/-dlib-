@@ -53,9 +53,32 @@
         <div class="nav-right">
           <router-link to="/camera" class="nav-item">摄像头识别</router-link>
           <router-link to="/logs" class="nav-item">识别记录</router-link>
-          <router-link to="/register" class="nav-item login-btn">
-            登录&nbsp;/&nbsp;注册 <span class="caret">▾</span>
-          </router-link>
+
+          <!-- 新增的下拉菜单 -->
+          <div class="nav-item user-menu" @mouseenter="handleMouseEnter" @mouseleave="handleMouseLeave">
+            <span class="user-trigger">
+              <template v-if="userStore.isLoggedIn">
+                {{ userStore.userInfo.name }} <span class="caret">▾</span>
+              </template>
+              <template v-else>
+                登录&nbsp;/&nbsp;注册 <span class="caret">▾</span>
+              </template>
+            </span>
+
+            <!-- 下拉菜单 -->
+            <div class="dropdown" v-show="showDropdown" @mouseenter="showDropdown = true" @mouseleave="showDropdown = false">
+              <template v-if="userStore.isLoggedIn">
+<!--                <router-link to="/profile" class="dropdown-item">个人中心</router-link>-->
+<!--                <router-link to="/settings" class="dropdown-item">账号设置</router-link>-->
+                <div class="dropdown-divider"></div>
+                <a href="#" class="dropdown-item" @click.prevent="handleLogout">退出登录</a>
+              </template>
+              <template v-else>
+                <button class="dropdown-item login-btn" @click="openLoginModal">登录</button>
+                <button class="dropdown-item" @click="openRegisterModal">注册</button>
+              </template>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -85,6 +108,10 @@
     <main class="main-content">
       <router-view />
     </main>
+    <LoginModal
+  v-model:visible="authModal.visible"
+  v-model:mode="authModal.mode"
+/>
 
     <!-- ═══════════════════════════════
          FOOTER
@@ -117,9 +144,75 @@
 </template>
 
 <script setup>
-// 返回年份
-import { computed } from 'vue'
+
+// 1. 整合所有导入（保持顺序整洁，避免分散）
+import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { useUserStore } from '../stores/user'
+import { useAuthModalStore } from '../stores/authModal'
+import LoginModal from '../components/LoginModal.vue'
+
+// 2. 年份计算属性（原有）
 const currentYear = computed(() => new Date().getFullYear())
+
+// 3. 初始化仓库（原有）
+const userStore = useUserStore()
+const authModal = useAuthModalStore()
+
+// 4. 下拉菜单核心：新增延迟定时器 + 显示状态（原有showDropdown保留）
+const showDropdown = ref(false)
+let hideTimer = null // 存储延迟隐藏的定时器
+
+// 5. 新增：鼠标移入-立即显示+清除延迟
+const handleMouseEnter = () => {
+  clearTimeout(hideTimer) // 取消未执行的隐藏操作
+  showDropdown.value = true
+}
+
+// 6. 新增：鼠标移出-延迟200ms隐藏
+const handleMouseLeave = () => {
+  hideTimer = setTimeout(() => {
+    showDropdown.value = false
+  }, 900) // 200ms延迟，可调整（150-300ms最佳）
+}
+
+// 7. 原有：打开模态框（新增清除定时器）
+const openLoginModal = () => {
+  clearTimeout(hideTimer) // 点击时取消延迟，避免菜单异常
+  authModal.open('login')
+  showDropdown.value = false
+}
+const openRegisterModal = () => {
+  clearTimeout(hideTimer) // 同上
+  authModal.open('register')
+  showDropdown.value = false
+}
+
+// 8. 原有：退出登录（新增清除定时器）
+const handleLogout = () => {
+  clearTimeout(hideTimer) // 同上
+  userStore.logout()
+  showDropdown.value = false
+  // 可跳转首页
+}
+
+// 9. 原有：点击外部关闭菜单（新增清除定时器）
+const closeDropdown = (e) => {
+  if (!e.target.closest('.user-menu')) {
+    clearTimeout(hideTimer) // 点击外部时取消延迟
+    showDropdown.value = false
+  }
+}
+
+// 10. 原有：生命周期（保持不变，仅整合onMounted）
+onMounted(() => {
+  userStore.init() // 恢复用户状态
+  document.addEventListener('click', closeDropdown) // 绑定点击外部关闭
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', closeDropdown) // 解绑事件
+  clearTimeout(hideTimer) // 组件卸载时清除定时器，避免内存泄漏
+})
 </script>
 
 <style scoped>
@@ -338,4 +431,127 @@ const currentYear = computed(() => new Date().getFullYear())
 .footer-slogan { font-size:9px; color:#8a9aaa; letter-spacing:.05em; font-style:italic; }
 .footer-copy   { font-size:11px; color:#7a8a98; }
 .footer-credit { font-size:11px; color:#7a8a98; }
+
+/* 下方为下拉菜单组件 */
+
+/* ── User menu wrapper ── */
+.user-menu {
+  position: relative;
+  cursor: pointer;
+}
+
+/* ── Dropdown panel ── */
+.dropdown {
+  position: absolute;
+  top: calc(100% + 2px);
+  right: 0;
+  min-width: 110px;          /* 比之前更窄 */
+  z-index: 100;
+
+  /* 深海军蓝 + 斜线纹理，与导航栏一致 */
+  background-color: #1e2f3d;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgba(255,255,255,0.025) 0px,
+    rgba(255,255,255,0.025) 1px,
+    transparent 1px,
+    transparent 7px
+  );
+
+  border: 1px solid rgba(255,255,255,0.12);
+  border-top: none;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+  padding: 8px 0;
+}
+
+/* 缝线效果 */
+.dropdown::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 1.5px dashed rgba(255,255,255,0.18);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ── 每一项：外层行容器 ── */
+.dropdown-item {
+  position: relative;
+  z-index: 2;
+  display: block;
+  width: 100%;
+  /* 行内留出左右 padding，让盒子不顶边 */
+  padding: 5px 12px;
+  text-decoration: none;
+  white-space: nowrap;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font-family: 'Oswald', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  /* 文字颜色放到内层 span，这里透明 */
+  color: transparent;
+  transition: background 0.15s;
+}
+
+/* 悬停时行背景微亮 */
+.dropdown-item:hover {
+  background: rgba(255,255,255,0.04);
+}
+
+/* ── 内层文字盒子（模拟图中的浅灰圆角框） ── */
+.dropdown-item::after {
+  /* 不用 ::after，改用直接给 button/a 设置内嵌样式 —— 见下方方案 */
+}
+
+/* 重置上面的 color: transparent，改为给 button/a 直接设置外观 */
+.dropdown-item {
+  color: #c0d4e0;             /* 恢复文字颜色 */
+  /* 把每个 item 本身做成"盒子"样式 */
+  margin: 4px 10px;           /* 盒子离面板边缘的间距 */
+  padding: 7px 14px;          /* 盒子内边距 */
+  width: auto;                /* 去掉 100%，让盒子由内容决定宽度… */
+  width: calc(100% - 20px);   /* …但仍填满面板（减去左右 margin） */
+  border-radius: 3px;
+
+  /* 盒子背景：比面板稍亮的深蓝，带细边框 */
+  background-color: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06),
+              0 1px 3px rgba(0,0,0,0.3);
+  box-sizing: border-box;
+  text-align: center;         /* 文字居中，与图中对齐 */
+}
+
+.dropdown-item:hover {
+  background-color: rgba(255,255,255,0.13);
+  color: #ffffff;
+  border-color: rgba(255,255,255,0.22);
+}
+
+/* 登录按钮：金黄高亮 */
+.dropdown-item.login-btn {
+  color: #c8a030;
+  border-color: rgba(200,160,48,0.35);
+  background-color: rgba(200,160,48,0.08);
+}
+.dropdown-item.login-btn:hover {
+  color: #e6c040;
+  background-color: rgba(200,160,48,0.16);
+  border-color: rgba(230,192,64,0.45);
+}
+
+/* ── 分割线 ── */
+.dropdown-divider {
+  height: 1px;
+  background: rgba(255,255,255,0.1);
+  margin: 4px 10px;
+  position: relative;
+  z-index: 2;
+}
+
 </style>
