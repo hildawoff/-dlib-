@@ -60,7 +60,7 @@ const captureFrame = async () => {
     formData.append('file', blob)
 
     try {
-      const res = await request.post('/recognize', formData)
+      const res = await request.post('/camera_recognize', formData)
       result.value = res.data
     } catch (error) {
       console.error(error)

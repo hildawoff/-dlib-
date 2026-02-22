@@ -5,15 +5,35 @@ import Recognize from '../views/Recognize.vue'
 import Camera from "../views/Camera.vue"
 import Logs from "../views/Logs.vue"
 import AdminRegister from '../views/AdminRegister.vue'
+import UnknownList from "../views/UnknownList.vue"
+import Homepage from "../views/Homepage.vue"
+import Layout from "../components/Layout.vue"
 
 const routes = [
-  { path: '/', component: Login },
-  { path: '/register', component: Register },
-  { path: '/recognize', component: Recognize },
-  { path: '/camera', component: Camera},
-  { path: '/logs', component: Logs},
-  { path: '/admin/register', component: AdminRegister}
+  {
+    path: '/',
+    component: Layout,
+    children:[
+        { path: '', name: 'Home', component: Login },
+        { path: 'register', name: 'register', component: Register },
+        { path: 'recognize', name: 'recognize', component: Recognize },
+        { path: 'camera', name: 'camera', component: Camera},
+        { path: 'logs', name: 'logs', component: Logs},
+        { path: 'admin/register', name: 'admin', component: AdminRegister},
+        { path: 'unknown-users', name: 'unknown-users', component: UnknownList},
+        { path: 'homepage', name: 'homepage', component: Homepage}
+    ]
+  }
 ]
+
+
+
+
+
+
+
+
+
 
 const router = createRouter({
   history: createWebHistory(),
