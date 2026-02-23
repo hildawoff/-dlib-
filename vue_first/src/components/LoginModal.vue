@@ -6,7 +6,14 @@
           <button class="close-btn" @click="close">&times;</button>
 
           <form @submit.prevent="handleSubmit">
-            <!-- USERNAME / EMAIL -->
+            <!-- 标题 -->
+            <div class="field-group">
+              <h2 style="color:#c8d8e4; font-family:'Oswald',sans-serif; margin:0 0 18px;">
+                {{ mode === 'login' ? '管理员登录' : '管理员注册' }}
+              </h2>
+            </div>
+
+            <!-- USERNAME -->
             <div class="field-group">
               <label>USERNAME</label>
               <input v-model="form.username" type="text" required />
@@ -18,10 +25,17 @@
               <input v-model="form.password" type="password" required />
             </div>
 
+            <!-- 错误提示 -->
+            <div v-if="errorMsg" style="color:#e74c3c; font-size:13px; margin-bottom:10px;">
+              {{ errorMsg }}
+            </div>
+
             <!-- Actions row -->
             <div class="actions-row">
-              <button type="submit" class="go-btn">Go</button>
-              <a href="#" class="forgot-link" @click.prevent>Forgot Password?</a>
+              <button type="submit" class="go-btn" :disabled="loading">
+                {{ loading ? '…' : 'Go' }}
+              </button>
+              <a v-if="mode === 'login'" href="#" class="forgot-link" @click.prevent>Forgot Password?</a>
             </div>
 
             <!-- Toggle / register -->
@@ -38,9 +52,9 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
-import { useUserStore } from '../stores/user'
-import { useAuthModalStore } from '../stores/authModal'
+import { ref, reactive, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import request from '../api/request'
 
 const props = defineProps({
   visible: Boolean,
@@ -48,12 +62,20 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:visible', 'update:mode'])
 
-const userStore = useUserStore()
-const authModal = useAuthModalStore()
-
+const router = useRouter()
 const form = reactive({ username: '', password: '' })
+const loading = ref(false)
+const errorMsg = ref('')
+
+// 切换模式时清空表单和错误信息
+watch(() => props.mode, () => {
+  form.username = ''
+  form.password = ''
+  errorMsg.value = ''
+})
 
 const close = () => {
+  errorMsg.value = ''
   emit('update:visible', false)
 }
 
@@ -63,12 +85,38 @@ const toggleMode = () => {
 }
 
 const handleSubmit = async () => {
-  if (props.mode === 'login') {
-    userStore.login({ name: form.username })
-  } else {
-    userStore.login({ name: form.username })
+  errorMsg.value = ''
+  loading.value = true
+
+  try {
+    if (props.mode === 'login') {
+      // —— 登录 ——
+      const res = await request.post('/login', {
+        username: form.username,
+        password: form.password
+      })
+      localStorage.setItem('token', res.data.access_token)
+      close()
+      router.push('/register')
+    } else {
+      // —— 注册 ——
+      await request.post('/admin/register', {
+        username: form.username,
+        password: form.password
+      })
+      alert('注册成功，请登录')
+      // 注册成功后自动切换到登录模式
+      emit('update:mode', 'login')
+    }
+  } catch (error) {
+    if (props.mode === 'login') {
+      errorMsg.value = error.response?.data?.detail || '登录失败，请检查用户名和密码'
+    } else {
+      errorMsg.value = error.response?.data?.detail || '注册失败，请重试'
+    }
+  } finally {
+    loading.value = false
   }
-  close()
 }
 </script>
 
@@ -91,7 +139,6 @@ const handleSubmit = async () => {
   position: relative;
   width: 420px;
   padding: 40px 36px 32px;
-  /* dark steel-blue with diagonal texture — matches the navbar bg */
   background-color: #2e4255;
   background-image:
     repeating-linear-gradient(
@@ -102,7 +149,6 @@ const handleSubmit = async () => {
       transparent 7px
     );
   box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-  /* no border-radius — square corners like the original */
   border-radius: 0;
 }
 
@@ -147,9 +193,9 @@ const handleSubmit = async () => {
   outline: none;
   font-size: 13px;
   color: #333;
-  /* inset shadow for depth */
   box-shadow: inset 0 2px 4px rgba(0,0,0,0.25);
   border-radius: 1px;
+  box-sizing: border-box;
 }
 .field-group input:focus {
   background: #fff;
@@ -180,7 +226,8 @@ const handleSubmit = async () => {
   transition: background .15s;
   box-shadow: 0 2px 6px rgba(0,0,0,0.3);
 }
-.go-btn:hover { background: #e74c3c; }
+.go-btn:hover:not(:disabled) { background: #e74c3c; }
+.go-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .forgot-link {
   color: #c8d8e4;
