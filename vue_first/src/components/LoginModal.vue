@@ -97,7 +97,7 @@ const handleSubmit = async () => {
       })
       localStorage.setItem('token', res.data.access_token)
       close()
-      router.push('/register')
+      router.push('/')
     } else {
       // —— 注册 ——
       await request.post('/admin/register', {

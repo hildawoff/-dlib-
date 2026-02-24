@@ -8,6 +8,7 @@ import AdminRegister from '../views/AdminRegister.vue'
 import UnknownList from "../views/UnknownList.vue"
 import Homepage from "../views/Homepage.vue"
 import Layout from "../components/Layout.vue"
+import Attendance from "../views/Attendance.vue"
 
 const routes = [
   {
@@ -20,6 +21,7 @@ const routes = [
         { path: 'camera', name: 'camera', component: Camera},
         { path: 'logs', name: 'logs', component: Logs},
         { path: 'unknown-users', name: 'unknown-users', component: UnknownList},
+        { path: 'attendance',    name: 'attendance', component: Attendance }
         // { path: 'admin/register', name: 'admin', component: AdminRegister},
         // { path: 'homepage', name: 'homepage', component: Homepage}
     ]
