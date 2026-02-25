@@ -229,6 +229,26 @@
       </div>
     </div>
 
+    <div v-if="activeTab === 'settings'" class="tab-content">
+      <!-- 新增：全局设置面板 -->
+    <div class="panel" style="margin-top: 20px;">
+      <h3 class="panel-title">🛠️ 全局参数设置</h3>
+      <el-form label-width="150px" style="max-width: 500px;">
+        <el-form-item label="防抖时间(秒)">
+          <el-input-number v-model="globalConfig.checkin_debounce_seconds" @change="saveGlobalConfig" />
+          <div class="tip">同一人连续打卡的最小间隔，防止刷屏</div>
+        </el-form-item>
+        <el-form-item label="识别相似度阈值">
+          <el-slider v-model="globalConfig.face_similarity_threshold" :min="0" :max="1" :step="0.01" show-input @change="saveGlobalConfig" />
+          <div class="tip">值越高识别越严格，建议 0.6-0.8 之间</div>
+        </el-form-item>
+      </el-form>
+    </div>
+    </div>
+
+
+
+
   </div>
 </template>
 
@@ -236,6 +256,15 @@
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import request from '../api/request'
+import { ElMessage } from 'element-plus'
+
+// 定义错误码，与后端保持一致
+const ERROR_CODE = {
+  NO_FACE: 'NO_FACE_DETECTED',
+  UNKNOWN_USER: 'UNKNOWN_USER',
+  SYSTEM: 'SYSTEM_ERROR'
+}
+
 
 // ── Tab 配置 ─────────────────────────────────────────────
 const tabs = [
@@ -243,6 +272,7 @@ const tabs = [
   { key: 'stats',   label: '📊 数据概览' },
   { key: 'rules',   label: '⚙️ 考勤规则' },
   { key: 'members', label: '👥 人员管理' },
+  { key: 'settings',   label: '🛠️ 全局参数设置'}
 ]
 const activeTab = ref('today')
 
@@ -250,49 +280,146 @@ const activeTab = ref('today')
 const videoRef = ref(null)
 const canvasRef = ref(null)
 const checkinResult = ref(null)
+const isCameraActive = ref(false) // 新增：摄像头状态锁
 let stream = null
-let captureTimer = null
+let captureTimer = null  // 注意：这里不再是 interval ID，而是 timeout ID
 
+// 启动摄像头
 const startCamera = async () => {
+  if (isCameraActive.value) return // 防止重复启动
+
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: true })
     videoRef.value.srcObject = stream
-    captureTimer = setInterval(captureAndCheckin, 2000) // 每2秒识别一次
+    isCameraActive.value = true
+
+    // 等待视频流加载
+    await new Promise(resolve => setTimeout(resolve, 500))
+
+    // 开始识别循环
+    captureLoop()
   } catch {
     alert('无法启动摄像头，请检查权限')
   }
 }
 
 const stopCamera = () => {
-  clearInterval(captureTimer)
+  isCameraActive.value = false
+  clearTimeout(captureTimer) // 清除 setTimeout
   if (stream) stream.getTracks().forEach(t => t.stop())
   stream = null
 }
 
-const captureAndCheckin = () => {
-  if (!videoRef.value || !canvasRef.value) return
+// 【核心修改】递归循环识别，替代 setInterval
+const captureLoop = () => {
+  // 如果摄像头已停止，不再继续循环
+  if (!isCameraActive.value) return
+
+  captureAndCheckin()
+}
+
+const captureAndCheckin = async () => {
+  if (!videoRef.value || !canvasRef.value || !isCameraActive.value) return
+
   const ctx = canvasRef.value.getContext('2d')
-  canvasRef.value.width  = videoRef.value.videoWidth
+  canvasRef.value.width = videoRef.value.videoWidth
   canvasRef.value.height = videoRef.value.videoHeight
   ctx.drawImage(videoRef.value, 0, 0)
 
   canvasRef.value.toBlob(async (blob) => {
+    if (!blob) return
+
     const form = new FormData()
     form.append('file', blob, 'frame.jpg')
+
     try {
-      const res = await request.post('/attendance/checkin', form)
-      // 只在有实际打卡动作时显示气泡（防抖/已完成不弹出）
-      if (['check_in', 'check_out'].includes(res.data.action)) {
-        checkinResult.value = res.data
-        setTimeout(() => { checkinResult.value = null }, 5000)
+      // 1. 设置请求超时 (5秒)
+      const res = await request.post('/attendance/checkin', form, {
+        timeout: 5000,
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+
+      const data = res.data
+
+      // 2. 处理成功打卡
+      if (['check_in', 'check_out'].includes(data.action)) {
+        checkinResult.value = data
+        // playSound('success') // 如果有音效可开启
+
+        // 3秒后自动隐藏气泡
+        setTimeout(() => { checkinResult.value = null }, 3000)
         fetchTodayRecords()
+      } else {
+        // 处理防抖或已完成情况 (静默提示)
+        console.log('打卡忽略:', data.message)
       }
+
     } catch (e) {
-      // 未识别到人脸时不弹出，静默处理
-      console.debug('checkin:', e.response?.data?.detail)
+      // 3. 【核心修改】使用专门的错误处理函数
+      handleCheckinError(e)
+    } finally {
+      // 无论成功失败，继续下一轮循环
+      if (isCameraActive.value) {
+        captureTimer = setTimeout(captureLoop, 2000)
+      }
     }
-  }, 'image/jpeg', 0.8)
+  }, 'image/jpeg', 0.85)
 }
+
+// 核心改进：精细化错误处理函数
+const handleCheckinError = (error) => {
+  const status = error.response?.status
+  const detail = error.response?.data?.detail
+
+  // 定义默认错误信息
+  let message = '系统异常，请稍后重试'
+  let code = ERROR_CODE.SYSTEM
+
+  // 如果后端返回了标准 detail 对象
+  if (typeof detail === 'object' && detail.message) {
+    message = detail.message
+    code = detail.code
+  } else if (typeof detail === 'string') {
+    message = detail
+  }
+
+  // 根据不同类型进行反馈
+  switch (code) {
+    case ERROR_CODE.NO_FACE:
+      // 未检测到人脸：通常是因为人在动或侧脸，静默处理，避免频繁打扰
+      console.warn('未检测到人脸')
+      break
+
+    case ERROR_CODE.UNKNOWN_USER:
+      // 陌生人：弹出警告气泡
+      showWarningBubble('未识别身份', message)
+      // playSound('fail') // 如果有音效可开启
+      break
+
+    default:
+      // 其他错误：网络错误、服务器错误等
+      showWarningBubble('系统提示', message)
+      // playSound('fail')
+
+      // 如果是网络超时或服务器错误，增加间隔重试
+      if (!status || status >= 500) {
+        console.log('服务器异常，延长重试时间...')
+        captureTimer = setTimeout(captureLoop, 5000) // 延长到5秒
+      }
+      break
+  }
+}
+
+// 辅助函数：显示错误气泡
+const showWarningBubble = (title, msg) => {
+  checkinResult.value = {
+    action: 'error', // 错误状态
+    name: title,
+    message: msg
+  }
+  setTimeout(() => { checkinResult.value = null }, 3000)
+}
+
 
 // ── 今日记录 & 统计 ───────────────────────────────────────
 const todayRecords = ref([])
@@ -441,6 +568,40 @@ const toggleAttendance = async (user) => {
   await request.put(`/attendance/users/${user.id}/toggle-attendance`)
   await fetchAttendanceUsers()
 }
+
+
+// 新增：全局配置状态
+const globalConfig = ref({
+  checkin_debounce_seconds: 60,
+  face_similarity_threshold: 0.6
+})
+
+// 获取配置
+const fetchConfig = async () => {
+  const res = await request.get('/attendance/config')
+  res.data.forEach(item => {
+    if (globalConfig.value.hasOwnProperty(item.key)) {
+      // 根据类型转换值
+      if (item.key === 'face_similarity_threshold') {
+        globalConfig.value[item.key] = parseFloat(item.value)
+      } else {
+        globalConfig.value[item.key] = parseInt(item.value)
+      }
+    }
+  })
+}
+
+// 保存配置
+const saveGlobalConfig = async () => {
+  for (const key in globalConfig.value) {
+    await request.put(`/attendance/config/${key}`, {
+      value: String(globalConfig.value[key])
+    })
+  }
+  ElMessage.success('参数已更新')
+}
+
+
 
 // ── 生命周期 ──────────────────────────────────────────────
 onMounted(() => {
@@ -591,4 +752,14 @@ onUnmounted(() => {
 /* ── Transitions ── */
 .fade-enter-active, .fade-leave-active { transition: opacity .4s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
+
+/* 新增：错误气泡样式 */
+.result-bubble.error {
+  background: #fff0f0;
+  border: 1.5px solid #ff4d4f;
+}
+.result-bubble.error .result-name {
+  color: #ff4d4f;
+}
+
 </style>

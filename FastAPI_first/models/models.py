@@ -20,9 +20,9 @@ class FaceUser(Base):
     name = Column(String(100), nullable=True)
     email = Column(String(100), nullable=True)
     face_encoding = Column(LargeBinary)
-    is_unknown = Column(Boolean, default=True)
+    is_unknown = Column(Boolean, default=True, index=True)
     image_path = Column(String(200), nullable=True)
-    join_attendance = Column(Boolean, default=True)
+    join_attendance = Column(Boolean, default=True, index=True)
 
 
 class RecognitionLog(Base):
@@ -55,12 +55,36 @@ class AttendanceRecord(Base):
     __tablename__ = "attendance_records"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("face_users.id"), nullable=False)
-    date = Column(Date, nullable=False)                    # 考勤日期
-    check_in_time = Column(DateTime, nullable=True)        # 签到时间
+    user_id = Column(Integer, ForeignKey("face_users.id"), nullable=False, index=True)
+    date = Column(Date, nullable=False, index=True)                    # 考勤日期
+    check_in_time = Column(DateTime, nullable=True, index=True)        # 签到时间
     check_out_time = Column(DateTime, nullable=True)       # 签退时间
     status = Column(String(20))                            # on_time / late / absent
     late_minutes = Column(Integer, default=0)              # 迟到分钟数
     checkin_email_sent = Column(Boolean, default=False)    # 签到邮件是否已发
     checkout_email_sent = Column(Boolean, default=False)   # 签退邮件是否已发
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class SystemConfig(Base):
+    """系统全局配置表"""
+    __tablename__ = "system_config"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(50), unique=True, nullable=False)         # 配置键
+    value = Column(String(200), nullable=False)                   # 配置值
+    description = Column(String(200), nullable=True)              # 配置说明
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AwayLog(Base):
+    """离岗记录表"""
+    __tablename__ = "away_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("face_users.id"), nullable=False, index=True)
+    start_time = Column(DateTime, nullable=False)                 # 离岗开始时间
+    end_time = Column(DateTime, nullable=True)                    # 离岗结束时间（若为空表示仍在离岗）
+    duration_minutes = Column(Integer, default=0)                 # 离岗时长（分钟）
+    reason = Column(String(200), nullable=True)                   # 离岗原因（可选）
     created_at = Column(DateTime, default=datetime.utcnow)

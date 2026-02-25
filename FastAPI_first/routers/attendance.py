@@ -8,15 +8,32 @@ from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Backgro
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
+import logging  # 导入日志模块
+from fastapi import status  # 导入状态码常量
+
 from core.database import get_db
 from core.get_current_user import get_current_user
 from models import models
 from models.schemas import (
     AttendanceRuleCreate, AttendanceRuleUpdate, AttendanceRuleOut,
-    AttendanceRecordOut,
+    AttendanceRecordOut,SystemConfigCreate, SystemConfigOut, SystemConfigUpdate
 )
 from services import face_service, attendance_service, email_service
 from core.config import MAIL_USERNAME  # 管理员邮箱（用作迟到抄送）
+import numpy as np
+
+# 【新增】定义错误码常量，方便前端判断
+ERROR_NO_FACE = "NO_FACE_DETECTED"
+ERROR_UNKNOWN_USER = "UNKNOWN_USER"
+ERROR_SYSTEM = "SYSTEM_ERROR"
+
+# 配置日志
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+# 直接定义阈值
+SIMILARITY_THRESHOLD = 0.6
 
 router = APIRouter(
     prefix="/attendance",
@@ -42,110 +59,172 @@ async def attendance_checkin(
     - 同一人 60 秒内不重复打卡（防抖）。
     - 打卡后异步发送邮件通知。
     """
-    image_bytes = await file.read()
-
-    # 1. 人脸编码
-    encoding = face_service.get_face_encoding(image_bytes)
-    if encoding is None:
-        raise HTTPException(status_code=400, detail="未检测到人脸")
-
-    # 2. 只匹配参与考勤的已知用户（排除陌生人）
-    users = (
-        db.query(models.FaceUser)
-        .filter(
-            models.FaceUser.is_unknown == False,
-            models.FaceUser.join_attendance == True,
-        )
-        .all()
-    )
-
-    if not users:
-        raise HTTPException(status_code=404, detail="暂无考勤人员，请先在人员管理中开启考勤")
-
-    # 3. 最近邻匹配
-    best_match = None
-    min_dist = 999.0
-    for user in users:
-        stored = np.frombuffer(user.face_encoding)
-        dist = float(np.linalg.norm(stored - encoding))
-        if dist < min_dist:
-            min_dist = dist
-            best_match = user
-
-    THRESHOLD = 0.6
-    if best_match is None or min_dist >= THRESHOLD:
-        raise HTTPException(status_code=404, detail="未匹配到考勤人员，相似度不足")
-
-    similarity = round(1 - min_dist, 4)
-
-    # 4. 执行考勤业务逻辑
-    result = attendance_service.process_attendance(db, best_match)
-    action = result["action"]
-
-    # 5. 防抖直接返回
-    if action == "debounce":
-        return {
-            "message": result["message"],
-            "name": best_match.name,
-            "similarity": similarity,
-        }
-
-    if action == "already_complete":
-        return {
-            "message": result["message"],
-            "name": best_match.name,
-            "similarity": similarity,
-        }
-
-    record: models.AttendanceRecord = result["record"]
-
-    # 6. 异步发送邮件（不阻塞响应）
-    user_email = best_match.email
-    if user_email:
-        if action == "check_in":
-            check_in_str = record.check_in_time.strftime("%Y-%m-%d %H:%M:%S")
-            if result["status"] == "on_time":
-                background_tasks.add_task(
-                    email_service.send_checkin_ontime_email,
-                    best_match.name, user_email, check_in_str,
-                )
-            else:
-                background_tasks.add_task(
-                    email_service.send_checkin_late_email,
-                    best_match.name, user_email, check_in_str,
-                    result["late_minutes"], MAIL_USERNAME,  # 管理员邮箱抄送
-                )
-            # 标记邮件已发送
-            record.checkin_email_sent = True
-            db.commit()
-
-        elif action == "check_out":
-            check_out_str = record.check_out_time.strftime("%Y-%m-%d %H:%M:%S")
-            work_hours = result.get("work_hours", 0)
-            background_tasks.add_task(
-                email_service.send_checkout_email,
-                best_match.name, user_email, check_out_str, work_hours,
+    try:
+        # 1. 文件格式校验
+        if not file.content_type or not file.content_type.startswith('image/'):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": ERROR_SYSTEM, "message": "请上传有效的图片格式"}
             )
-            record.checkout_email_sent = True
-            db.commit()
 
-    # 7. 构建响应
-    response = {
-        "message": result["message"],
-        "name": best_match.name,
-        "similarity": similarity,
-        "action": action,
-        "record_id": record.id,
-    }
-    if action == "check_in":
-        response["status"] = result["status"]
-        response["late_minutes"] = result["late_minutes"]
-        response["check_in_time"] = record.check_in_time.strftime("%H:%M:%S")
-    elif action == "check_out":
-        response["work_hours"] = result.get("work_hours", 0)
-        response["check_out_time"] = record.check_out_time.strftime("%H:%M:%S")
+        # 2. 文件大小校验 (防止上传过大文件导致内存溢出)
+        image_bytes = await file.read()
+        max_size = 5 * 1024 * 1024  # 5MB
+        if len(image_bytes) > max_size:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail={"code": ERROR_SYSTEM, "message": "图片大小不能超过5MB"}
+            )
 
-    return response
+        # 3. 人脸编码处理 (捕获底层 dlib/face_recognition 库可能的崩溃)
+        try:
+            encoding = face_service.get_face_encoding(image_bytes)
+        except Exception as e:
+            logger.error(f"人脸编码库错误: {e}")
+            # 这里的错误可能是图片损坏、dlib崩溃等，不应暴露给用户具体堆栈
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"code": ERROR_SYSTEM, "message": "图像处理失败，请确保照片清晰且光线充足"}
+            )
+
+        # 4. 人脸检测结果判断
+        if encoding is None:
+            # 返回特定的错误码，前端据此判断是否需要重试
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": ERROR_NO_FACE, "message": "未检测到人脸，请正对摄像头"}
+            )
+
+        # 5. 只匹配参与考勤的已知用户
+        users = (
+            db.query(models.FaceUser)
+            .filter(
+                models.FaceUser.is_unknown == False,
+                models.FaceUser.join_attendance == True,
+            )
+            .all()
+        )
+
+        if not users:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": ERROR_SYSTEM, "message": "系统无考勤人员，请先在人员管理中开启考勤"}
+            )
+
+        # 3. 【核心优化】构建特征矩阵 & 向量化计算距离
+        # 将数据库中的二进制编码转换为 NumPy 矩阵
+        # 形状: (用户数 N, 128)
+        known_encodings = np.array([
+            np.frombuffer(user.face_encoding) for user in users
+        ])
+
+        # 将当前人脸编码转换为 (1, 128) 以便广播计算
+        current_encoding = np.array([encoding])
+
+        # 一次性计算所有距离 (利用广播机制)
+        # 结果形状: (用户数 N, )
+        # 计算公式: 欧氏距离
+        distances = np.linalg.norm(known_encodings - current_encoding, axis=1)
+
+        # 找到最小距离的索引
+        min_index = np.argmin(distances)
+        min_dist = distances[min_index]
+
+        # 4. 阈值判断
+        if min_dist >= SIMILARITY_THRESHOLD:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": ERROR_UNKNOWN_USER, "message": f"未匹配到考勤人员 (距离: {min_dist:.2f})"}
+            )
+
+        best_match = users[min_index]
+        similarity = round(1 - min_dist, 4)
+
+        # 4. 执行考勤业务逻辑
+        try:
+            result = attendance_service.process_attendance(db, best_match)
+        except Exception as e:
+            logger.error(f"数据库操作失败: {e}")
+            # 数据库错误是严重错误，需要回滚（service层处理）并提示用户
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"code": ERROR_SYSTEM, "message": "考勤记录保存失败，请稍后重试"}
+            )
+
+        action = result["action"]
+
+        # 5. 防抖直接返回
+        if action == "debounce":
+            return {
+                "message": result["message"],
+                "name": best_match.name,
+                "similarity": similarity,
+            }
+
+        if action == "already_complete":
+            return {
+                "message": result["message"],
+                "name": best_match.name,
+                "similarity": similarity,
+            }
+
+        record: models.AttendanceRecord = result["record"]
+
+        # 6. 异步发送邮件（不阻塞响应）
+        user_email = best_match.email
+        if user_email:
+            if action == "check_in":
+                check_in_str = record.check_in_time.strftime("%Y-%m-%d %H:%M:%S")
+                if result["status"] == "on_time":
+                    background_tasks.add_task(
+                        email_service.send_checkin_ontime_email,
+                        best_match.name, user_email, check_in_str,
+                    )
+                else:
+                    background_tasks.add_task(
+                        email_service.send_checkin_late_email,
+                        best_match.name, user_email, check_in_str,
+                        result["late_minutes"], MAIL_USERNAME,  # 管理员邮箱抄送
+                    )
+                # 标记邮件已发送
+                record.checkin_email_sent = True
+                db.commit()
+
+            elif action == "check_out":
+                check_out_str = record.check_out_time.strftime("%Y-%m-%d %H:%M:%S")
+                work_hours = result.get("work_hours", 0)
+                background_tasks.add_task(
+                    email_service.send_checkout_email,
+                    best_match.name, user_email, check_out_str, work_hours,
+                )
+                record.checkout_email_sent = True
+                db.commit()
+
+        # 7. 构建响应
+        response = {
+            "message": result["message"],
+            "name": best_match.name,
+            "similarity": similarity,
+            "action": action,
+            "record_id": record.id,
+        }
+        if action == "check_in":
+            response["status"] = result["status"]
+            response["late_minutes"] = result["late_minutes"]
+            response["check_in_time"] = record.check_in_time.strftime("%H:%M:%S")
+        elif action == "check_out":
+            response["work_hours"] = result.get("work_hours", 0)
+            response["check_out_time"] = record.check_out_time.strftime("%H:%M:%S")
+
+        return response
+    except HTTPException:
+        raise  # 抛出我们手动设定的异常
+    except Exception as e:
+        logger.exception("未知系统错误")  # 记录完整堆栈
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"code": ERROR_SYSTEM, "message": "系统繁忙，请稍后再试"}
+        )
 
 
 # ╔══════════════════════════════════════════════════════════╗
@@ -447,3 +526,41 @@ def stats_weekly(
             "on_time": count - late_count,
         })
     return result
+
+
+# ╔══════════════════════════════════════════════════════════╗
+# ║               系统配置管理接口 (管理员)                  ║
+# ╚══════════════════════════════════════════════════════════╝
+
+@router.get("/config", response_model=List[SystemConfigOut])
+def get_configs(
+        db: Session = Depends(get_db),
+        current_user: str = Depends(get_current_user),
+):
+    """获取所有系统配置"""
+    return db.query(models.SystemConfig).all()
+
+
+@router.put("/config/{config_key}")
+def update_config(
+        config_key: str,
+        data: SystemConfigUpdate,
+        db: Session = Depends(get_db),
+        current_user: str = Depends(get_current_user),
+):
+    """更新系统配置（如防抖时间、相似度阈值）"""
+    config = db.query(models.SystemConfig).filter(
+        models.SystemConfig.key == config_key
+    ).first()
+    if not config:
+        # 如果不存在则创建
+        config = models.SystemConfig(key=config_key, value=data.value, description=data.description)
+        db.add(config)
+    else:
+        config.value = data.value
+        if data.description:
+            config.description = data.description
+
+    db.commit()
+    db.refresh(config)
+    return {"message": "配置更新成功", "data": config}

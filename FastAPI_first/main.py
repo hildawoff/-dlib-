@@ -19,6 +19,33 @@ from routers.register import router as register_router
 from routers.camera import router as camera_router
 from routers.attendance import router as attendance_router
 
+from datetime import datetime
+from apscheduler.schedulers.background import BackgroundScheduler
+from core.database import SessionLocal
+from services.attendance_service import perform_auto_checkout
+
+# ══════════════ 定时任务配置 ══════════════
+scheduler = BackgroundScheduler()
+
+def scheduled_auto_checkout():
+    """定时任务包装器"""
+    db = SessionLocal()
+    try:
+        print(f"[定时任务] 开始执行自动签退检查... {datetime.now()}")
+        perform_auto_checkout(db)
+    except Exception as e:
+        print(f"[定时任务] 执行出错: {e}")
+    finally:
+        db.close()
+
+# 每10分钟检查一次是否需要自动签退
+scheduler.add_job(scheduled_auto_checkout, 'interval', minutes=10)
+scheduler.start()
+
+# 程序退出时关闭调度器
+import atexit
+atexit.register(lambda: scheduler.shutdown())
+
 
 Base.metadata.create_all(bind=engine)
 

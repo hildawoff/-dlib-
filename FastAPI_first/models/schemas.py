@@ -75,3 +75,24 @@ class AttendanceRecordOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+# ===================== 系统配置 Schema =====================
+
+class SystemConfigCreate(BaseModel):
+    key: str
+    value: str
+    description: Optional[str] = None
+
+class SystemConfigOut(BaseModel):
+    id: int
+    key: str
+    value: str
+    description: Optional[str] = None
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class SystemConfigUpdate(BaseModel):
+    value: str
+    description: Optional[str] = None
