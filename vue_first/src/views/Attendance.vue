@@ -17,8 +17,8 @@
          Tab 1：今日考勤 + 摄像头打卡
     ══════════════════════════════════════════ -->
     <div v-if="activeTab === 'today'" class="tab-content">
+      <!-- 原有内容保持不变 -->
       <div class="two-col">
-
         <!-- 左栏：摄像头打卡 -->
         <div class="panel">
           <h3 class="panel-title">📷 摄像头打卡</h3>
@@ -99,26 +99,20 @@
          Tab 2：数据概览（ECharts）
     ══════════════════════════════════════════ -->
     <div v-if="activeTab === 'stats'" class="tab-content">
+      <!-- 原有内容保持不变 -->
       <div class="charts-grid">
-
-        <!-- 今日出勤率 环形图 -->
         <div class="panel chart-panel">
           <h3 class="panel-title">今日出勤率</h3>
           <div ref="rateChartRef" class="chart-box" />
         </div>
-
-        <!-- 近7天趋势 折线图 -->
         <div class="panel chart-panel">
           <h3 class="panel-title">近 7 天出勤趋势</h3>
           <div ref="trendChartRef" class="chart-box" />
         </div>
-
-        <!-- 近7天迟到统计 柱状图 -->
         <div class="panel chart-panel">
           <h3 class="panel-title">近 7 天迟到统计</h3>
           <div ref="lateChartRef" class="chart-box" />
         </div>
-
       </div>
     </div>
 
@@ -126,6 +120,7 @@
          Tab 3：考勤规则管理
     ══════════════════════════════════════════ -->
     <div v-if="activeTab === 'rules'" class="tab-content">
+      <!-- 原有内容保持不变 -->
       <div class="panel">
         <div style="display:flex;justify-content:space-between;align-items:center">
           <h3 class="panel-title" style="margin:0">⚙️ 考勤规则</h3>
@@ -210,6 +205,7 @@
          Tab 4：人员考勤开关
     ══════════════════════════════════════════ -->
     <div v-if="activeTab === 'members'" class="tab-content">
+      <!-- 原有内容保持不变 -->
       <div class="panel">
         <h3 class="panel-title">👥 考勤人员管理</h3>
         <p class="tip">在此开启或关闭人员的考勤参与状态。陌生人不可参与考勤。</p>
@@ -229,26 +225,73 @@
       </div>
     </div>
 
+    <!-- ══════════════════════════════════════════
+         Tab 5：全局参数设置
+    ══════════════════════════════════════════ -->
     <div v-if="activeTab === 'settings'" class="tab-content">
-      <!-- 新增：全局设置面板 -->
-    <div class="panel" style="margin-top: 20px;">
-      <h3 class="panel-title">🛠️ 全局参数设置</h3>
-      <el-form label-width="150px" style="max-width: 500px;">
-        <el-form-item label="防抖时间(秒)">
-          <el-input-number v-model="globalConfig.checkin_debounce_seconds" @change="saveGlobalConfig" />
-          <div class="tip">同一人连续打卡的最小间隔，防止刷屏</div>
-        </el-form-item>
-        <el-form-item label="识别相似度阈值">
-          <el-slider v-model="globalConfig.face_similarity_threshold" :min="0" :max="1" :step="0.01" show-input @change="saveGlobalConfig" />
-          <div class="tip">值越高识别越严格，建议 0.6-0.8 之间</div>
-        </el-form-item>
-      </el-form>
+      <!-- 原有内容保持不变 -->
+      <div class="panel" style="margin-top: 20px;">
+        <h3 class="panel-title">🛠️ 全局参数设置</h3>
+        <el-form label-width="150px" style="max-width: 500px;">
+          <el-form-item label="防抖时间(秒)">
+            <el-input-number v-model="globalConfig.checkin_debounce_seconds" @change="saveGlobalConfig" />
+            <div class="tip">同一人连续打卡的最小间隔，防止刷屏</div>
+          </el-form-item>
+          <el-form-item label="识别相似度阈值">
+            <el-slider v-model="globalConfig.face_similarity_threshold" :min="0" :max="1" :step="0.01" show-input @change="saveGlobalConfig" />
+            <div class="tip">值越高识别越严格，建议 0.6-0.8 之间</div>
+          </el-form-item>
+        </el-form>
+      </div>
     </div>
+
+    <!-- ══════════════════════════════════════════
+         新增 Tab 6：记录导出（按日期筛选并导出 CSV）
+    ══════════════════════════════════════════ -->
+    <div v-if="activeTab === 'export'" class="tab-content">
+      <div class="panel">
+        <h3 class="panel-title">📤 考勤记录导出</h3>
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+          <el-date-picker
+            v-model="exportDate"
+            type="date"
+            placeholder="选择日期"
+            format="YYYY-MM-DD"
+            value-format="YYYY-MM-DD"
+            style="width: 200px;"
+          />
+          <button class="btn btn-blue" @click="fetchExportRecords" :disabled="!exportDate">查询</button>
+          <button class="btn btn-green" @click="exportToCSV" :disabled="!exportRecords.length">导出 CSV</button>
+        </div>
+
+        <el-table :data="exportRecords" size="small" style="width: 100%" max-height="400">
+          <el-table-column prop="date" label="日期" width="100" />
+          <el-table-column prop="name" label="姓名" width="100" />
+          <el-table-column prop="email" label="邮箱" min-width="160" show-overflow-tooltip />
+          <el-table-column prop="check_in_time" label="签到时间" width="140">
+            <template #default="scope">
+              {{ scope.row.check_in_time ? scope.row.check_in_time.replace('T', ' ').substring(0,19) : '--' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="check_out_time" label="签退时间" width="140">
+            <template #default="scope">
+              {{ scope.row.check_out_time ? scope.row.check_out_time.replace('T', ' ').substring(0,19) : '--' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="status" label="状态" width="90">
+            <template #default="scope">
+              <el-tag :type="scope.row.status === 'on_time' ? 'success' : 'danger'" size="small">
+                {{ scope.row.status === 'on_time' ? '准时' : scope.row.status === 'late' ? `迟到${scope.row.late_minutes}分` : scope.row.status }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="late_minutes" label="迟到(分)" width="80" />
+        </el-table>
+        <div v-if="exportRecords.length === 0 && exportDate" style="text-align: center; color: #999; padding: 20px;">
+          暂无该日期的考勤记录
+        </div>
+      </div>
     </div>
-
-
-
-
   </div>
 </template>
 
@@ -265,14 +308,14 @@ const ERROR_CODE = {
   SYSTEM: 'SYSTEM_ERROR'
 }
 
-
 // ── Tab 配置 ─────────────────────────────────────────────
 const tabs = [
   { key: 'today',   label: '📷 今日打卡' },
   { key: 'stats',   label: '📊 数据概览' },
   { key: 'rules',   label: '⚙️ 考勤规则' },
   { key: 'members', label: '👥 人员管理' },
-  { key: 'settings',   label: '🛠️ 全局参数设置'}
+  { key: 'settings', label: '🛠️ 全局参数设置' },
+  { key: 'export',  label: '📤 记录导出' }  // 新增导出标签
 ]
 const activeTab = ref('today')
 
@@ -280,23 +323,17 @@ const activeTab = ref('today')
 const videoRef = ref(null)
 const canvasRef = ref(null)
 const checkinResult = ref(null)
-const isCameraActive = ref(false) // 新增：摄像头状态锁
+const isCameraActive = ref(false)
 let stream = null
-let captureTimer = null  // 注意：这里不再是 interval ID，而是 timeout ID
+let captureTimer = null
 
-// 启动摄像头
 const startCamera = async () => {
-  if (isCameraActive.value) return // 防止重复启动
-
+  if (isCameraActive.value) return
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: true })
     videoRef.value.srcObject = stream
     isCameraActive.value = true
-
-    // 等待视频流加载
     await new Promise(resolve => setTimeout(resolve, 500))
-
-    // 开始识别循环
     captureLoop()
   } catch {
     alert('无法启动摄像头，请检查权限')
@@ -305,22 +342,18 @@ const startCamera = async () => {
 
 const stopCamera = () => {
   isCameraActive.value = false
-  clearTimeout(captureTimer) // 清除 setTimeout
+  clearTimeout(captureTimer)
   if (stream) stream.getTracks().forEach(t => t.stop())
   stream = null
 }
 
-// 【核心修改】递归循环识别，替代 setInterval
 const captureLoop = () => {
-  // 如果摄像头已停止，不再继续循环
   if (!isCameraActive.value) return
-
   captureAndCheckin()
 }
 
 const captureAndCheckin = async () => {
   if (!videoRef.value || !canvasRef.value || !isCameraActive.value) return
-
   const ctx = canvasRef.value.getContext('2d')
   canvasRef.value.width = videoRef.value.videoWidth
   canvasRef.value.height = videoRef.value.videoHeight
@@ -328,37 +361,25 @@ const captureAndCheckin = async () => {
 
   canvasRef.value.toBlob(async (blob) => {
     if (!blob) return
-
     const form = new FormData()
     form.append('file', blob, 'frame.jpg')
 
     try {
-      // 1. 设置请求超时 (5秒)
       const res = await request.post('/attendance/checkin', form, {
         timeout: 5000,
         headers: { 'Content-Type': 'multipart/form-data' }
       })
-
       const data = res.data
-
-      // 2. 处理成功打卡
       if (['check_in', 'check_out'].includes(data.action)) {
         checkinResult.value = data
-        // playSound('success') // 如果有音效可开启
-
-        // 3秒后自动隐藏气泡
         setTimeout(() => { checkinResult.value = null }, 3000)
         fetchTodayRecords()
       } else {
-        // 处理防抖或已完成情况 (静默提示)
         console.log('打卡忽略:', data.message)
       }
-
     } catch (e) {
-      // 3. 【核心修改】使用专门的错误处理函数
       handleCheckinError(e)
     } finally {
-      // 无论成功失败，继续下一轮循环
       if (isCameraActive.value) {
         captureTimer = setTimeout(captureLoop, 2000)
       }
@@ -366,60 +387,42 @@ const captureAndCheckin = async () => {
   }, 'image/jpeg', 0.85)
 }
 
-// 核心改进：精细化错误处理函数
 const handleCheckinError = (error) => {
   const status = error.response?.status
   const detail = error.response?.data?.detail
-
-  // 定义默认错误信息
   let message = '系统异常，请稍后重试'
   let code = ERROR_CODE.SYSTEM
-
-  // 如果后端返回了标准 detail 对象
   if (typeof detail === 'object' && detail.message) {
     message = detail.message
     code = detail.code
   } else if (typeof detail === 'string') {
     message = detail
   }
-
-  // 根据不同类型进行反馈
   switch (code) {
     case ERROR_CODE.NO_FACE:
-      // 未检测到人脸：通常是因为人在动或侧脸，静默处理，避免频繁打扰
       console.warn('未检测到人脸')
       break
-
     case ERROR_CODE.UNKNOWN_USER:
-      // 陌生人：弹出警告气泡
       showWarningBubble('未识别身份', message)
-      // playSound('fail') // 如果有音效可开启
       break
-
     default:
-      // 其他错误：网络错误、服务器错误等
       showWarningBubble('系统提示', message)
-      // playSound('fail')
-
-      // 如果是网络超时或服务器错误，增加间隔重试
       if (!status || status >= 500) {
         console.log('服务器异常，延长重试时间...')
-        captureTimer = setTimeout(captureLoop, 5000) // 延长到5秒
+        captureTimer = setTimeout(captureLoop, 5000)
       }
       break
   }
 }
 
-// 辅助函数：显示错误气泡
 const showWarningBubble = (title, msg) => {
   checkinResult.value = {
-    action: 'error', // 错误状态
+    action: 'error',
     name: title,
     message: msg
   }
   setTimeout(() => { checkinResult.value = null }, 3000)
 }
-
 
 // ── 今日记录 & 统计 ───────────────────────────────────────
 const todayRecords = ref([])
@@ -449,7 +452,6 @@ const initCharts = async () => {
   const stat = statRes.data
   const week = weekRes.data
 
-  // 环形图 - 今日出勤率
   rateChart = echarts.init(rateChartRef.value)
   rateChart.setOption({
     tooltip: { trigger: 'item' },
@@ -465,7 +467,6 @@ const initCharts = async () => {
     }]
   })
 
-  // 折线图 - 近7天趋势
   trendChart = echarts.init(trendChartRef.value)
   trendChart.setOption({
     tooltip: { trigger: 'axis' },
@@ -482,7 +483,6 @@ const initCharts = async () => {
     ]
   })
 
-  // 柱状图 - 近7天迟到
   lateChart = echarts.init(lateChartRef.value)
   lateChart.setOption({
     tooltip: { trigger: 'axis' },
@@ -569,19 +569,16 @@ const toggleAttendance = async (user) => {
   await fetchAttendanceUsers()
 }
 
-
-// 新增：全局配置状态
+// ── 全局配置 ──────────────────────────────────────────────
 const globalConfig = ref({
   checkin_debounce_seconds: 60,
   face_similarity_threshold: 0.6
 })
 
-// 获取配置
 const fetchConfig = async () => {
   const res = await request.get('/attendance/config')
   res.data.forEach(item => {
     if (globalConfig.value.hasOwnProperty(item.key)) {
-      // 根据类型转换值
       if (item.key === 'face_similarity_threshold') {
         globalConfig.value[item.key] = parseFloat(item.value)
       } else {
@@ -591,7 +588,6 @@ const fetchConfig = async () => {
   })
 }
 
-// 保存配置
 const saveGlobalConfig = async () => {
   for (const key in globalConfig.value) {
     await request.put(`/attendance/config/${key}`, {
@@ -601,13 +597,93 @@ const saveGlobalConfig = async () => {
   ElMessage.success('参数已更新')
 }
 
+// ═══════════════════════════════════════════════════════════
+// 新增：记录导出相关
+// ═══════════════════════════════════════════════════════════
+const exportDate = ref('')                 // 选中的日期 (YYYY-MM-DD)
+const exportRecords = ref([])              // 查询到的记录
 
+// 根据日期查询考勤记录
+const fetchExportRecords = async () => {
+  if (!exportDate.value) {
+    ElMessage.warning('请先选择日期')
+    return
+  }
+  try {
+    const res = await request.get('/attendance/records', {
+      params: { query_date: exportDate.value, limit: 200 }  // 一次性获取较多记录
+    })
+    exportRecords.value = res.data
+    if (res.data.length === 0) {
+      ElMessage.info('该日期暂无考勤记录')
+    }
+  } catch (err) {
+    ElMessage.error('查询失败：' + (err.response?.data?.detail || err.message))
+  }
+}
+
+// 导出为 CSV 文件
+const exportToCSV = () => {
+  if (!exportRecords.value.length) return
+
+  // 定义 CSV 列头及对应的字段
+  const headers = [
+    { label: '日期', key: 'date' },
+    { label: '姓名', key: 'name' },
+    { label: '邮箱', key: 'email' },
+    { label: '签到时间', key: 'check_in_time' },
+    { label: '签退时间', key: 'check_out_time' },
+    { label: '状态', key: 'status' },
+    { label: '迟到分钟', key: 'late_minutes' }
+  ]
+
+  // 将记录转换为 CSV 行
+  const rows = exportRecords.value.map(record => {
+    return headers.map(h => {
+      let value = record[h.key]
+      if (h.key === 'check_in_time' || h.key === 'check_out_time') {
+        // 格式化时间，去掉 T 和毫秒
+        if (value) {
+          value = value.replace('T', ' ').substring(0, 19)
+        } else {
+          value = ''
+        }
+      }
+      if (h.key === 'status') {
+        // 状态映射为中文
+        if (value === 'on_time') value = '准时'
+        else if (value === 'late') value = `迟到${record.late_minutes}分钟`
+        else value = value || ''
+      }
+      // 处理逗号、换行符等，用双引号包裹
+      if (typeof value === 'string' && (value.includes(',') || value.includes('"') || value.includes('\n'))) {
+        value = `"${value.replace(/"/g, '""')}"`
+      }
+      return value !== undefined && value !== null ? value : ''
+    }).join(',')
+  })
+
+  // 组装 CSV 内容
+  const csvContent = [
+    headers.map(h => h.label).join(','),
+    ...rows
+  ].join('\n')
+
+  // 创建下载链接
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' }) // 加 BOM 处理中文
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(blob)
+  link.download = `考勤记录_${exportDate.value || '全部'}.csv`
+  link.click()
+  URL.revokeObjectURL(link.href)
+}
 
 // ── 生命周期 ──────────────────────────────────────────────
 onMounted(() => {
   fetchTodayRecords()
   fetchRules()
   fetchAttendanceUsers()
+  fetchConfig()
 })
 
 watch(activeTab, (val) => {
@@ -623,6 +699,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* 原有样式保持不变，新增部分已在上面内联，无需额外样式 */
 .attendance-wrap {
   max-width: 1100px;
   margin: 0 auto;
@@ -753,7 +830,6 @@ onUnmounted(() => {
 .fade-enter-active, .fade-leave-active { transition: opacity .4s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 
-/* 新增：错误气泡样式 */
 .result-bubble.error {
   background: #fff0f0;
   border: 1.5px solid #ff4d4f;
@@ -761,5 +837,4 @@ onUnmounted(() => {
 .result-bubble.error .result-name {
   color: #ff4d4f;
 }
-
 </style>
