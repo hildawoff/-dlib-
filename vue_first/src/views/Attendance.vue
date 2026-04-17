@@ -246,50 +246,101 @@
     </div>
 
     <!-- ══════════════════════════════════════════
-         新增 Tab 6：记录导出（按日期筛选并导出 CSV）
+         Tab 6：记录导出（按日期筛选并导出 CSV）
     ══════════════════════════════════════════ -->
     <div v-if="activeTab === 'export'" class="tab-content">
       <div class="panel">
         <h3 class="panel-title">📤 考勤记录导出</h3>
-        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
-          <el-date-picker
-            v-model="exportDate"
-            type="date"
-            placeholder="选择日期"
-            format="YYYY-MM-DD"
-            value-format="YYYY-MM-DD"
-            style="width: 200px;"
-          />
-          <button class="btn btn-blue" @click="fetchExportRecords" :disabled="!exportDate">查询</button>
-          <button class="btn btn-green" @click="exportToCSV" :disabled="!exportRecords.length">导出 CSV</button>
+
+        <div class="export-mode-bar">
+          <el-radio-group v-model="exportMode" size="small">
+            <el-radio-button value="daily">日报</el-radio-button>
+            <el-radio-button value="monthly">月报</el-radio-button>
+          </el-radio-group>
         </div>
 
-        <el-table :data="exportRecords" size="small" style="width: 100%" max-height="400">
-          <el-table-column prop="date" label="日期" width="100" />
-          <el-table-column prop="name" label="姓名" width="100" />
-          <el-table-column prop="email" label="邮箱" min-width="160" show-overflow-tooltip />
-          <el-table-column prop="check_in_time" label="签到时间" width="140">
-            <template #default="scope">
-              {{ scope.row.check_in_time ? scope.row.check_in_time.replace('T', ' ').substring(0,19) : '--' }}
-            </template>
-          </el-table-column>
-          <el-table-column prop="check_out_time" label="签退时间" width="140">
-            <template #default="scope">
-              {{ scope.row.check_out_time ? scope.row.check_out_time.replace('T', ' ').substring(0,19) : '--' }}
-            </template>
-          </el-table-column>
-          <el-table-column prop="status" label="状态" width="90">
-            <template #default="scope">
-              <el-tag :type="scope.row.status === 'on_time' ? 'success' : 'danger'" size="small">
-                {{ scope.row.status === 'on_time' ? '准时' : scope.row.status === 'late' ? `迟到${scope.row.late_minutes}分` : scope.row.status }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="late_minutes" label="迟到(分)" width="80" />
-        </el-table>
-        <div v-if="exportRecords.length === 0 && exportDate" style="text-align: center; color: #999; padding: 20px;">
-          暂无该日期的考勤记录
+        <div class="export-filter">
+          <template v-if="exportMode === 'daily'">
+            <span class="filter-label">日期范围：</span>
+            <el-date-picker
+              v-model="exportDateRange"
+              type="daterange"
+              range-separator="至"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              format="YYYY-MM-DD DD"
+              value-format="YYYY-MM-DD"
+              style="width: 300px;"
+            />
+          </template>
+          <template v-else>
+            <span class="filter-label">年份：</span>
+            <el-input-number v-model="exportYear" :min="2020" :max="2030" :controls="false" style="width: 90px;" />
+            <span class="filter-label" style="margin-left: 16px;">月份：</span>
+            <el-select v-model="exportMonth" placeholder="全年" clearable style="width: 100px;">
+              <el-option v-for="m in 12" :key="m" :label="m + '月'" :value="m" />
+            </el-select>
+          </template>
+
+          <span class="filter-label" style="margin-left: 16px;">人员：</span>
+          <el-select v-model="exportUserId" placeholder="全部成员" clearable style="width: 140px;">
+            <el-option v-for="u in allUsers" :key="u.id" :label="u.name" :value="u.id" />
+          </el-select>
+
+          <button class="btn btn-blue" style="margin-left: 12px;" @click="fetchExportData">查询</button>
+          <button class="btn btn-green" @click="handleExport" :disabled="!exportData.length">导出 CSV</button>
         </div>
+
+        <template v-if="exportMode === 'daily'">
+          <el-table :data="exportData" size="small" style="width: 100%; margin-top: 16px;" max-height="400">
+            <el-table-column prop="date" label="日期" width="100" />
+            <el-table-column prop="name" label="姓名" width="100" />
+            <el-table-column prop="email" label="邮箱" min-width="160" show-overflow-tooltip />
+            <el-table-column prop="check_in_time" label="签到时间" width="140">
+              <template #default="scope">
+                {{ scope.row.check_in_time ? formatTime(scope.row.check_in_time) : '--' }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="check_out_time" label="签退时间" width="140">
+              <template #default="scope">
+                {{ scope.row.check_out_time ? formatTime(scope.row.check_out_time) : '--' }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="status" label="状态" width="90">
+              <template #default="scope">
+                <el-tag :type="scope.row.status === 'on_time' ? 'success' : 'danger'" size="small">
+                  {{ scope.row.status === 'on_time' ? '准时' : scope.row.status === 'late' ? `迟到${scope.row.late_minutes}分` : scope.row.status }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="late_minutes" label="迟到(分)" width="80" />
+          </el-table>
+          <div v-if="exportData.length === 0 && hasSearched" style="text-align: center; color: #999; padding: 20px;">
+            暂无考勤记录
+          </div>
+        </template>
+
+        <template v-else>
+          <el-table :data="exportData" size="small" style="width: 100%; margin-top: 16px;">
+            <el-table-column prop="name" label="姓名" width="100" />
+            <el-table-column prop="email" label="邮箱" min-width="160" show-overflow-tooltip />
+            <el-table-column prop="total_days" label="应到天数" width="90" />
+            <el-table-column prop="check_in_count" label="签到天数" width="90" />
+            <el-table-column prop="on_time_count" label="准时天数" width="90" />
+            <el-table-column prop="late_count" label="迟到天数" width="90" />
+            <el-table-column prop="total_late_minutes" label="迟到总(分)" width="90" />
+            <el-table-column prop="attendance_rate" label="出勤率" width="90">
+              <template #default="scope">
+                <span :style="{ color: scope.row.attendance_rate >= 90 ? '#27ae60' : scope.row.attendance_rate >= 60 ? '#e67e22' : '#e74c3c' }">
+                  {{ scope.row.attendance_rate }}%
+                </span>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div v-if="exportData.length === 0 && hasSearched" style="text-align: center; color: #999; padding: 20px;">
+            暂无考勤记录
+          </div>
+        </template>
       </div>
     </div>
   </div>
@@ -598,83 +649,123 @@ const saveGlobalConfig = async () => {
 }
 
 // ═══════════════════════════════════════════════════════════
-// 新增：记录导出相关
+// 记录导出相关
 // ═══════════════════════════════════════════════════════════
-const exportDate = ref('')                 // 选中的日期 (YYYY-MM-DD)
-const exportRecords = ref([])              // 查询到的记录
+const exportMode = ref('daily')
+const exportDateRange = ref([])
+const exportYear = ref(new Date().getFullYear())
+const exportMonth = ref(null)
+const exportUserId = ref(null)
+const exportData = ref([])
+const hasSearched = ref(false)
+const allUsers = ref([])
 
-// 根据日期查询考勤记录
-const fetchExportRecords = async () => {
-  if (!exportDate.value) {
-    ElMessage.warning('请先选择日期')
-    return
-  }
+const fetchAllUsers = async () => {
+  const res = await request.get('/attendance/users')
+  allUsers.value = res.data
+}
+
+const fetchExportData = async () => {
+  hasSearched.value = true
   try {
-    const res = await request.get('/attendance/records', {
-      params: { query_date: exportDate.value, limit: 200 }  // 一次性获取较多记录
-    })
-    exportRecords.value = res.data
-    if (res.data.length === 0) {
-      ElMessage.info('该日期暂无考勤记录')
+    if (exportMode.value === 'daily') {
+      const [start, end] = exportDateRange.value || []
+      const res = await request.get('/attendance/records/export', {
+        params: { start_date: start, end_date: end, user_id: exportUserId.value }
+      })
+      exportData.value = res.data
+    } else {
+      const res = await request.get('/attendance/records/monthly', {
+        params: {
+          year: exportYear.value,
+          month: exportMonth.value,
+          user_id: exportUserId.value
+        }
+      })
+      exportData.value = res.data
+    }
+    if (exportData.value.length === 0) {
+      ElMessage.info('暂无考勤记录')
     }
   } catch (err) {
     ElMessage.error('查询失败：' + (err.response?.data?.detail || err.message))
   }
 }
 
-// 导出为 CSV 文件
-const exportToCSV = () => {
-  if (!exportRecords.value.length) return
+const formatDateTime = (t) => {
+  if (!t) return ''
+  return t.replace('T', ' ').substring(0, 19)
+}
 
-  // 定义 CSV 列头及对应的字段
-  const headers = [
-    { label: '日期', key: 'date' },
-    { label: '姓名', key: 'name' },
-    { label: '邮箱', key: 'email' },
-    { label: '签到时间', key: 'check_in_time' },
-    { label: '签退时间', key: 'check_out_time' },
-    { label: '状态', key: 'status' },
-    { label: '迟到分钟', key: 'late_minutes' }
-  ]
+const handleExport = () => {
+  if (!exportData.value.length) return
 
-  // 将记录转换为 CSV 行
-  const rows = exportRecords.value.map(record => {
-    return headers.map(h => {
-      let value = record[h.key]
-      if (h.key === 'check_in_time' || h.key === 'check_out_time') {
-        // 格式化时间，去掉 T 和毫秒
-        if (value) {
-          value = value.replace('T', ' ').substring(0, 19)
-        } else {
-          value = ''
+  let headers, rows, filename
+
+  if (exportMode.value === 'daily') {
+    headers = [
+      { label: '日期', key: 'date' },
+      { label: '姓名', key: 'name' },
+      { label: '邮箱', key: 'email' },
+      { label: '签到时间', key: 'check_in_time' },
+      { label: '签退时间', key: 'check_out_time' },
+      { label: '状态', key: 'status' },
+      { label: '迟到分钟', key: 'late_minutes' }
+    ]
+    rows = exportData.value.map(record => {
+      return headers.map(h => {
+        let value = record[h.key]
+        if (h.key === 'status') {
+          value = value === 'on_time' ? '准时' : value === 'late' ? `迟到${record.late_minutes}分钟` : value
         }
-      }
-      if (h.key === 'status') {
-        // 状态映射为中文
-        if (value === 'on_time') value = '准时'
-        else if (value === 'late') value = `迟到${record.late_minutes}分钟`
-        else value = value || ''
-      }
-      // 处理逗号、换行符等，用双引号包裹
-      if (typeof value === 'string' && (value.includes(',') || value.includes('"') || value.includes('\n'))) {
-        value = `"${value.replace(/"/g, '""')}"`
-      }
-      return value !== undefined && value !== null ? value : ''
-    }).join(',')
-  })
+        if (value && (h.key === 'check_in_time' || h.key === 'check_out_time')) {
+          value = formatDateTime(value)
+        }
+        if (typeof value === 'string' && (value.includes(',') || value.includes('"') || value.includes('\n'))) {
+          value = `"${value.replace(/"/g, '""')}"`
+        }
+        return value !== undefined && value !== null ? value : ''
+      }).join(',')
+    })
+    filename = `考勤日报_${exportDateRange.value?.[0] || '全部'}`
+  } else {
+    headers = [
+      { label: '姓名', key: 'name' },
+      { label: '邮箱', key: 'email' },
+      { label: '应到天数', key: 'total_days' },
+      { label: '签到天数', key: 'check_in_count' },
+      { label: '准时天数', key: 'on_time_count' },
+      { label: '迟到天数', key: 'late_count' },
+      { label: '迟到总分钟', key: 'total_late_minutes' },
+      { label: '出勤率', key: 'attendance_rate' }
+    ]
+    rows = exportData.value.map(record => {
+      return headers.map(h => {
+        let value = record[h.key]
+        if (h.key === 'attendance_rate') {
+          value = value + '%'
+        }
+        if (typeof value === 'string' && (value.includes(',') || value.includes('"') || value.includes('\n'))) {
+          value = `"${value.replace(/"/g, '""')}"`
+        }
+        return value !== undefined && value !== null ? value : ''
+      }).join(',')
+    })
+    filename = exportMonth.value
+      ? `考勤月报_${exportYear.value}_${exportMonth.value}月`
+      : `考勤年报_${exportYear.value}`
+  }
 
-  // 组装 CSV 内容
   const csvContent = [
     headers.map(h => h.label).join(','),
     ...rows
   ].join('\n')
 
-  // 创建下载链接
-  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' }) // 加 BOM 处理中文
+  const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
-  link.download = `考勤记录_${exportDate.value || '全部'}.csv`
-  link.click()
+  link.download = `${filename}.csv`
+  
   URL.revokeObjectURL(link.href)
 }
 
@@ -684,6 +775,7 @@ onMounted(() => {
   fetchRules()
   fetchAttendanceUsers()
   fetchConfig()
+  fetchAllUsers()
 })
 
 watch(activeTab, (val) => {
@@ -836,5 +928,24 @@ onUnmounted(() => {
 }
 .result-bubble.error .result-name {
   color: #ff4d4f;
+}
+
+/* ── 导出功能样式 ── */
+.export-mode-bar {
+  margin-bottom: 16px;
+}
+.export-filter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 6px;
+}
+.filter-label {
+  font-size: 13px;
+  color: #666;
 }
 </style>

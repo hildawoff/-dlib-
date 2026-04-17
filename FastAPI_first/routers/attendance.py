@@ -2,6 +2,7 @@
 # 所有接口统一前缀 /attendance，方便与其他接口区分
 import numpy as np
 from datetime import datetime, date
+from calendar import monthrange
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, BackgroundTasks, Query
@@ -271,6 +272,139 @@ def get_attendance_records(
         item.name = name
         item.email = email
         result.append(item)
+    return result
+
+
+@router.get("/records/export")
+def get_records_for_export(
+    start_date: Optional[date] = Query(None, description="开始日期"),
+    end_date: Optional[date] = Query(None, description="结束日期"),
+    user_id: Optional[int] = Query(None, description="按人员ID筛选(空则查全部)"),
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
+):
+    """考勤记录导出接口，支持日期范围和人员筛选"""
+    q = (
+        db.query(
+            models.AttendanceRecord,
+            models.FaceUser.name,
+            models.FaceUser.email,
+        )
+        .join(models.FaceUser, models.AttendanceRecord.user_id == models.FaceUser.id)
+    )
+
+    if start_date:
+        q = q.filter(models.AttendanceRecord.date >= start_date)
+    if end_date:
+        q = q.filter(models.AttendanceRecord.date <= end_date)
+    if user_id:
+        q = q.filter(models.AttendanceRecord.user_id == user_id)
+
+    rows = q.order_by(models.AttendanceRecord.date.desc(), models.FaceUser.name).all()
+
+    result = []
+    for record, name, email in rows:
+        result.append({
+            "id": record.id,
+            "user_id": record.user_id,
+            "name": name,
+            "email": email,
+            "date": str(record.date),
+            "check_in_time": record.check_in_time.strftime("%Y-%m-%d %H:%M:%S") if record.check_in_time else None,
+            "check_out_time": record.check_out_time.strftime("%Y-%m-%d %H:%M:%S") if record.check_out_time else None,
+            "status": record.status,
+            "late_minutes": record.late_minutes,
+        })
+    return result
+
+
+@router.get("/records/monthly")
+def get_monthly_stats(
+    year: int = Query(None, description="年份 e.g. 2024"),
+    month: Optional[int] = Query(None, description="月份 1-12 (空则查全年)"),
+    user_id: Optional[int] = Query(None, description="人员ID (空则查全部)"),
+    db: Session = Depends(get_db),
+    current_user: str = Depends(get_current_user),
+):
+    """月报/年报统计，支持按人员筛选"""
+    if month:
+        start_date = date(year, month, 1)
+        _, last_day = monthrange(year, month)
+        end_date = date(year, month, last_day)
+    else:
+        start_date = date(year, 1, 1)
+        end_date = date(year, 12, 31)
+
+    base_query = db.query(models.AttendanceRecord).join(
+        models.FaceUser, models.AttendanceRecord.user_id == models.FaceUser.id
+    ).filter(
+        models.AttendanceRecord.date >= start_date,
+        models.AttendanceRecord.date <= end_date,
+    )
+
+    if user_id:
+        base_query = base_query.filter(models.AttendanceRecord.user_id == user_id)
+
+    records = base_query.all()
+
+    user_stats = {}
+    for rec in records:
+        uid = rec.user_id
+        if uid not in user_stats:
+            user_stats[uid] = {
+                "user_id": uid,
+                "name": "",
+                "total_days": set(),
+                "check_in_count": 0,
+                "check_out_count": 0,
+                "on_time_count": 0,
+                "late_count": 0,
+                "absent_count": 0,
+                "total_late_minutes": 0,
+            }
+
+        user_stats[uid]["total_days"].add(rec.date)
+        if rec.check_in_time:
+            user_stats[uid]["check_in_count"] += 1
+            if rec.status == "on_time":
+                user_stats[uid]["on_time_count"] += 1
+            elif rec.status == "late":
+                user_stats[uid]["late_count"] += 1
+                user_stats[uid]["total_late_minutes"] += rec.late_minutes
+
+        if rec.check_out_time:
+            user_stats[uid]["check_out_count"] += 1
+
+    user_ids = list(user_stats.keys())
+    if user_ids:
+        users = db.query(models.FaceUser).filter(
+            models.FaceUser.id.in_(user_ids)
+        ).all()
+        for u in users:
+            if u.id in user_stats:
+                user_stats[u.id]["name"] = u.name
+                user_stats[u.id]["email"] = u.email
+
+    total_work_days = len(user_stats[list(user_ids)[0]]["total_days"]) if user_ids else 0
+
+    result = []
+    for uid, stat in user_stats.items():
+        total_days = len(stat["total_days"])
+        result.append({
+            "user_id": uid,
+            "name": stat["name"],
+            "email": stat.get("email", ""),
+            "total_days": total_days,
+            "check_in_count": stat["check_in_count"],
+            "check_out_count": stat["check_out_count"],
+            "on_time_count": stat["on_time_count"],
+            "late_count": stat["late_count"],
+            "absent_count": stat["absent_count"],
+            "total_late_minutes": stat["total_late_minutes"],
+            "attendance_rate": round(stat["check_in_count"] / total_days * 100, 1) if total_days > 0 else 0,
+        })
+
+    result.sort(key=lambda x: x["name"])
     return result
 
 
