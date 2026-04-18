@@ -590,8 +590,10 @@ def get_attendance_users(
     return [
         {
             "id": u.id,
+            "employee_id": u.employee_id,
             "name": u.name,
             "email": u.email,
+            "department": u.department,
             "join_attendance": u.join_attendance,
             "image_path": u.image_path,
         }

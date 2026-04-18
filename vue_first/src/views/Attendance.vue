@@ -205,14 +205,15 @@
          Tab 4：人员考勤开关
     ══════════════════════════════════════════ -->
     <div v-if="activeTab === 'members'" class="tab-content">
-      <!-- 原有内容保持不变 -->
       <div class="panel">
         <h3 class="panel-title">👥 考勤人员管理</h3>
-        <p class="tip">在此开启或关闭人员的考勤参与状态。陌生人不可参与考勤。</p>
+        <p class="tip">在此管理人员的考勤参与状态和基本信息。</p>
         <el-table :data="attendanceUsers">
           <el-table-column prop="id" label="ID" width="60" />
-          <el-table-column prop="name" label="姓名" />
-          <el-table-column prop="email" label="邮箱" />
+          <el-table-column prop="employee_id" label="工号" width="100" />
+          <el-table-column prop="name" label="姓名" width="100" />
+          <el-table-column prop="email" label="邮箱" min-width="160" show-overflow-tooltip />
+          <el-table-column prop="department" label="部门" width="120" />
           <el-table-column label="考勤状态" width="100">
             <template #default="s">
               <el-switch
@@ -221,8 +222,34 @@
               />
             </template>
           </el-table-column>
+          <el-table-column label="操作" width="80">
+            <template #default="s">
+              <el-button size="small" type="primary" @click="openEditEmployee(s.row)">编辑</el-button>
+            </template>
+          </el-table-column>
         </el-table>
       </div>
+
+      <el-dialog v-model="showEditDialog" title="编辑员工信息" width="400px">
+        <el-form :model="editForm" label-width="80px">
+          <el-form-item label="工号">
+            <el-input v-model="editForm.employee_id" />
+          </el-form-item>
+          <el-form-item label="姓名">
+            <el-input v-model="editForm.name" />
+          </el-form-item>
+          <el-form-item label="邮箱">
+            <el-input v-model="editForm.email" />
+          </el-form-item>
+          <el-form-item label="部门">
+            <el-input v-model="editForm.department" />
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="showEditDialog = false">取消</el-button>
+          <el-button type="primary" @click="saveEmployee">保存</el-button>
+        </template>
+      </el-dialog>
     </div>
 
     <!-- ══════════════════════════════════════════
@@ -618,6 +645,42 @@ const fetchAttendanceUsers = async () => {
 const toggleAttendance = async (user) => {
   await request.put(`/attendance/users/${user.id}/toggle-attendance`)
   await fetchAttendanceUsers()
+}
+
+const showEditDialog = ref(false)
+const editForm = ref({
+  id: null,
+  employee_id: '',
+  name: '',
+  email: '',
+  department: ''
+})
+
+const openEditEmployee = (user) => {
+  editForm.value = {
+    id: user.id,
+    employee_id: user.employee_id || '',
+    name: user.name || '',
+    email: user.email || '',
+    department: user.department || ''
+  }
+  showEditDialog.value = true
+}
+
+const saveEmployee = async () => {
+  try {
+    await request.put(`/employees/${editForm.value.id}`, {
+      employee_id: editForm.value.employee_id || null,
+      name: editForm.value.name,
+      email: editForm.value.email,
+      department: editForm.value.department || null
+    })
+    ElMessage.success('保存成功')
+    showEditDialog.value = false
+    fetchAttendanceUsers()
+  } catch (err) {
+    ElMessage.error(err.response?.data?.detail || '保存失败')
+  }
 }
 
 // ── 全局配置 ──────────────────────────────────────────────

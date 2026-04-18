@@ -17,10 +17,12 @@ class FaceUser(Base):
     __tablename__ = "face_users"
 
     id = Column(Integer, primary_key=True, index=True)
+    employee_id = Column(String(50), nullable=True, index=True)  # 工号
     name = Column(String(100), nullable=True)
     email = Column(String(100), nullable=True)
+    department = Column(String(100), nullable=True)  # 所属部门
     face_encoding = Column(LargeBinary)
-    is_unknown = Column(Boolean, default=True, index=True)
+    is_unknown = Column(Boolean, default=False, index=True)
     image_path = Column(String(200), nullable=True)
     join_attendance = Column(Boolean, default=True, index=True)
 
