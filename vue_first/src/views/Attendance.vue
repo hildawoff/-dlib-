@@ -256,7 +256,6 @@
          Tab 5：全局参数设置
     ══════════════════════════════════════════ -->
     <div v-if="activeTab === 'settings'" class="tab-content">
-      <!-- 原有内容保持不变 -->
       <div class="panel" style="margin-top: 20px;">
         <h3 class="panel-title">🛠️ 全局参数设置</h3>
         <el-form label-width="150px" style="max-width: 500px;">
@@ -267,6 +266,10 @@
           <el-form-item label="识别相似度阈值">
             <el-slider v-model="globalConfig.face_similarity_threshold" :min="0" :max="1" :step="0.01" show-input @change="saveGlobalConfig" />
             <div class="tip">值越高识别越严格，建议 0.6-0.8 之间</div>
+          </el-form-item>
+          <el-form-item label="邮件通知">
+            <el-switch v-model="globalConfig.email_notification_enabled" @change="saveGlobalConfig" />
+            <div class="tip">开启后，考勤签到/签退会发送邮件通知</div>
           </el-form-item>
         </el-form>
       </div>
@@ -686,13 +689,16 @@ const saveEmployee = async () => {
 // ── 全局配置 ──────────────────────────────────────────────
 const globalConfig = ref({
   checkin_debounce_seconds: 60,
-  face_similarity_threshold: 0.6
+  face_similarity_threshold: 0.6,
+  email_notification_enabled: true
 })
 
 const fetchConfig = async () => {
   const res = await request.get('/attendance/config')
   res.data.forEach(item => {
-    if (globalConfig.value.hasOwnProperty(item.key)) {
+    if (item.key === 'email_notification_enabled') {
+      globalConfig.value[item.key] = item.value === 'true'
+    } else if (globalConfig.value.hasOwnProperty(item.key)) {
       if (item.key === 'face_similarity_threshold') {
         globalConfig.value[item.key] = parseFloat(item.value)
       } else {

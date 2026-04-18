@@ -173,7 +173,9 @@ async def attendance_checkin(
 
         # 6. 异步发送邮件（不阻塞响应）
         user_email = best_match.email
-        if user_email:
+        email_enabled = get_email_notification_enabled(db)
+        
+        if email_enabled and user_email:
             if action == "check_in":
                 check_in_str = record.check_in_time.strftime("%Y-%m-%d %H:%M:%S")
                 if result["status"] == "on_time":
@@ -668,13 +670,33 @@ def stats_weekly(
 # ║               系统配置管理接口 (管理员)                  ║
 # ╚══════════════════════════════════════════════════════════╝
 
+def get_email_notification_enabled(db: Session) -> bool:
+    """检查邮件通知是否开启"""
+    config = db.query(models.SystemConfig).filter(
+        models.SystemConfig.key == "email_notification_enabled"
+    ).first()
+    if config and config.value == "false":
+        return False
+    return True
+
+
 @router.get("/config", response_model=List[SystemConfigOut])
 def get_configs(
         db: Session = Depends(get_db),
         current_user: str = Depends(get_current_user),
 ):
     """获取所有系统配置"""
-    return db.query(models.SystemConfig).all()
+    configs = db.query(models.SystemConfig).all()
+    if not any(c.key == "email_notification_enabled" for c in configs):
+        default_config = models.SystemConfig(
+            key="email_notification_enabled",
+            value="true",
+            description="是否开启邮件通知"
+        )
+        db.add(default_config)
+        db.commit()
+        configs = db.query(models.SystemConfig).all()
+    return configs
 
 
 @router.put("/config/{config_key}")
