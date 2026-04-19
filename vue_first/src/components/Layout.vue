@@ -44,6 +44,7 @@
           <router-link to="/" class="nav-item active">Homepage</router-link>
           <router-link to="/register" class="nav-item">人脸登记</router-link>
           <router-link to="/recognize" class="nav-item">人脸识别</router-link>
+          <router-link to="/attendance" class="nav-item">考勤</router-link>
         </div>
 
         <!-- 圆形中心间隔件 -->
@@ -52,6 +53,7 @@
         <!-- 右侧导航栏 -->
         <div class="nav-right">
           <router-link to="/camera" class="nav-item">摄像头识别</router-link>
+          <router-link to="/unknown-users" class="nav-item">陌生人记录</router-link>
           <router-link to="/logs" class="nav-item">识别记录</router-link>
 
           <!-- 新增的下拉菜单 -->
