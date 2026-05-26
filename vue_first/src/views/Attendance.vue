@@ -1,5 +1,10 @@
 <template>
   <div class="attendance-wrap">
+    <div class="page-head">
+      <span class="eyebrow">Attendance Center</span>
+      <h2>考勤管理</h2>
+      <p>集中处理摄像头打卡、考勤统计、规则配置、人员状态和报表导出。</p>
+    </div>
 
     <!-- ── 顶部 Tab 切换 ── -->
     <div class="tab-bar">
@@ -1016,5 +1021,273 @@ onUnmounted(() => {
 .filter-label {
   font-size: 13px;
   color: #666;
+}
+
+/* ── Refined attendance surface ── */
+.attendance-wrap {
+  max-width: 1160px;
+  padding: 28px;
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(37, 53, 68, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(31, 46, 59, 0.08);
+}
+
+.page-head {
+  margin-bottom: 22px;
+}
+
+.eyebrow {
+  color: #5a9ab8;
+  font-family: 'Oswald', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.page-head h2 {
+  margin: 6px 0 8px;
+  color: #1e3245;
+  font-size: 26px;
+}
+
+.page-head p {
+  color: #667582;
+  font-size: 14px;
+}
+
+.tab-bar {
+  gap: 8px;
+  margin-bottom: 22px;
+  padding: 6px;
+  border: 1px solid rgba(37, 53, 68, 0.1);
+  border-radius: 8px;
+  background: #f6f4ef;
+  overflow-x: auto;
+}
+
+.tab-btn {
+  min-height: 38px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border-bottom: none;
+  margin-bottom: 0;
+  color: #60717d;
+  white-space: nowrap;
+}
+
+.tab-btn:hover {
+  color: #1e3245;
+  background: rgba(90, 154, 184, 0.08);
+}
+
+.tab-btn.active {
+  color: #fff;
+  border-bottom-color: transparent;
+  background: linear-gradient(180deg, #2f5268 0%, #1e3245 100%);
+  box-shadow: 0 6px 16px rgba(30, 50, 69, 0.22);
+}
+
+.tab-content {
+  animation: tab-in .18s ease-out;
+}
+
+@keyframes tab-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.panel {
+  border: 1px solid rgba(37, 53, 68, 0.1);
+  box-shadow: 0 8px 24px rgba(31, 46, 59, 0.08);
+}
+
+.panel-title {
+  color: #1e3245;
+  font-size: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(37, 53, 68, 0.08);
+}
+
+.two-col {
+  align-items: start;
+}
+
+.video-box {
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border: 1px solid #223545;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+
+.btn {
+  min-height: 36px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(31, 46, 59, 0.12);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.btn-green {
+  background: #2d8a57;
+}
+
+.btn-red {
+  background: #c84f47;
+}
+
+.btn-blue {
+  background: #2f6f93;
+}
+
+.refresh-btn {
+  border-radius: 6px;
+  background: #f2f7f9;
+}
+
+.result-bubble {
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(31, 46, 59, 0.08);
+}
+
+.stat-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stat-card {
+  padding: 14px 10px;
+  border-radius: 8px;
+  box-shadow: 0 6px 16px rgba(31, 46, 59, 0.12);
+}
+
+.stat-card.blue { background: linear-gradient(180deg, #3c86ad, #286985); }
+.stat-card.green { background: linear-gradient(180deg, #35a66a, #267a4e); }
+.stat-card.orange { background: linear-gradient(180deg, #e9983c, #c26b24); }
+.stat-card.red { background: linear-gradient(180deg, #df665f, #b9443d); }
+
+.stat-num {
+  font-size: 26px;
+}
+
+.charts-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.chart-panel {
+  min-height: 330px;
+}
+
+.chart-box {
+  height: 260px;
+}
+
+.tip {
+  color: #7c8790;
+  line-height: 1.6;
+}
+
+.export-filter {
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(37, 53, 68, 0.08);
+  background: #f6f4ef;
+}
+
+.filter-label {
+  color: #52616b;
+  font-weight: 700;
+}
+
+:deep(.el-table) {
+  border-radius: 8px;
+  overflow: hidden;
+  --el-table-header-bg-color: #f0f4f6;
+  --el-table-header-text-color: #1e3245;
+  --el-table-row-hover-bg-color: #f2f7f9;
+}
+
+:deep(.el-table th.el-table__cell) {
+  font-weight: 700;
+}
+
+:deep(.el-table .el-table__cell) {
+  padding: 10px 0;
+}
+
+:deep(.el-dialog) {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+:deep(.el-dialog__header) {
+  margin-right: 0;
+  padding: 18px 20px;
+  background: #f6f4ef;
+  border-bottom: 1px solid rgba(37, 53, 68, 0.08);
+}
+
+:deep(.el-radio-button__inner),
+:deep(.el-button),
+:deep(.el-input__wrapper),
+:deep(.el-input-number),
+:deep(.el-select__wrapper),
+:deep(.el-date-editor) {
+  border-radius: 6px;
+}
+
+@media (max-width: 980px) {
+  .attendance-wrap {
+    padding: 20px;
+  }
+
+  .two-col,
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-panel {
+    min-height: 300px;
+  }
+}
+
+@media (max-width: 640px) {
+  .attendance-wrap {
+    padding: 18px;
+  }
+
+  .page-head h2 {
+    font-size: 22px;
+  }
+
+  .tab-bar {
+    align-items: stretch;
+  }
+
+  .tab-btn {
+    flex: 0 0 auto;
+  }
+
+  .stat-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .export-filter {
+    align-items: stretch;
+  }
+
+  .export-filter > * {
+    max-width: 100%;
+  }
+
+  .btn-row,
+  .export-filter {
+    flex-wrap: wrap;
+  }
 }
 </style>
