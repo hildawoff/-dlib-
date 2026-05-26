@@ -8,3 +8,6 @@ python-jose
 dlib
 opencv-python
 numpy
+python-dotenv
+fastapi-mail
+apscheduler

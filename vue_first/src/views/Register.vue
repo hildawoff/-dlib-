@@ -1,59 +1,77 @@
 <template>
-  <div class="register-container">
-    <el-card class="register-card">
-      <h2>注册人脸</h2>
+  <div class="register-page">
+    <section class="page-shell">
+      <div class="page-head">
+        <span class="eyebrow">Face Enrollment</span>
+        <h2>人脸登记</h2>
+        <p>录入员工基础信息，并采集一张清晰正脸照片作为后续识别和考勤依据。</p>
+      </div>
 
-      <el-form label-width="80px">
-        <el-form-item label="工号">
-          <el-input v-model="employee_id" placeholder="可选" />
-        </el-form-item>
-        <el-form-item label="姓名">
-          <el-input v-model="name" placeholder="必填" />
-        </el-form-item>
-        <el-form-item label="邮箱">
-          <el-input v-model="email" placeholder="必填" />
-        </el-form-item>
-        <el-form-item label="部门">
-          <el-input v-model="department" placeholder="可选" />
-        </el-form-item>
-      </el-form>
+      <div class="register-grid">
+        <el-card class="panel-card" shadow="never">
+          <div class="panel-title">员工信息</div>
+          <el-form label-width="78px" class="info-form">
+            <el-form-item label="工号">
+              <el-input v-model="employee_id" placeholder="可选" />
+            </el-form-item>
+            <el-form-item label="姓名">
+              <el-input v-model="name" placeholder="必填" />
+            </el-form-item>
+            <el-form-item label="邮箱">
+              <el-input v-model="email" placeholder="必填" />
+            </el-form-item>
+            <el-form-item label="部门">
+              <el-input v-model="department" placeholder="可选" />
+            </el-form-item>
+          </el-form>
 
-      <div class="face-source-section">
-        <div class="section-title">人脸采集方式</div>
-        <el-radio-group v-model="faceSource" size="small" class="source-tabs">
-          <el-radio-button value="upload">上传图片</el-radio-button>
-          <el-radio-button value="camera">摄像头拍照</el-radio-button>
-        </el-radio-group>
-
-        <div v-if="faceSource === 'upload'" class="upload-section">
-          <input type="file" @change="handleFile" accept="image/*" class="file-input" />
-          <div v-if="previewUrl" class="preview-box">
-            <img :src="previewUrl" alt="预览" />
+          <div class="action-buttons">
+            <el-button type="success" :disabled="!canSubmit" @click="submit">提交登记</el-button>
+            <el-button @click="$router.push('/recognize')">去识别页面</el-button>
           </div>
-        </div>
+        </el-card>
 
-        <div v-else class="camera-section">
-          <div class="camera-wrapper">
-            <video ref="videoRef" autoplay class="camera-video" />
-            <canvas ref="canvasRef" style="display: none" />
+        <el-card class="panel-card capture-card" shadow="never">
+          <div class="panel-title">人脸采集</div>
+          <el-radio-group v-model="faceSource" size="small" class="source-tabs">
+            <el-radio-button value="upload">上传图片</el-radio-button>
+            <el-radio-button value="camera">摄像头拍照</el-radio-button>
+          </el-radio-group>
+
+          <div v-if="faceSource === 'upload'" class="capture-section">
+            <label class="upload-box" for="register-face-file">
+              <input id="register-face-file" type="file" accept="image/*" @change="handleFile" />
+              <template v-if="previewUrl">
+                <img :src="previewUrl" alt="人脸预览" />
+              </template>
+              <template v-else>
+                <div class="upload-icon">+</div>
+                <div class="upload-text">选择人脸照片</div>
+                <div class="upload-tip">建议使用光线充足、无遮挡的正脸照片</div>
+              </template>
+            </label>
           </div>
-          <div class="camera-controls">
-            <el-button v-if="!cameraActive" type="primary" @click="startCamera">启动摄像头</el-button>
-            <el-button v-else type="warning" @click="capturePhoto">拍照采集</el-button>
-            <el-button v-if="cameraActive" @click="stopCamera">关闭摄像头</el-button>
+
+          <div v-else class="capture-section">
+            <div class="camera-wrapper">
+              <video ref="videoRef" autoplay muted playsinline class="camera-video" />
+              <div v-if="!cameraActive" class="camera-placeholder">摄像头未启动</div>
+              <canvas ref="canvasRef" style="display: none" />
+            </div>
+            <div class="camera-controls">
+              <el-button v-if="!cameraActive" type="primary" @click="startCamera">启动摄像头</el-button>
+              <el-button v-else type="warning" @click="capturePhoto">拍照采集</el-button>
+              <el-button v-if="cameraActive" @click="stopCamera">关闭摄像头</el-button>
+            </div>
           </div>
-          <div v-if="capturedPhoto" class="preview-box">
+
+          <div v-if="capturedPhoto" class="preview-strip">
             <img :src="capturedPhoto" alt="已拍照" />
-            <div class="tip">已采集人脸照片</div>
+            <span>已采集人脸照片</span>
           </div>
-        </div>
+        </el-card>
       </div>
-
-      <div class="action-buttons">
-        <el-button type="success" @click="submit" :disabled="!canSubmit">提交注册</el-button>
-        <el-button @click="$router.push('/recognize')">去识别页面</el-button>
-      </div>
-    </el-card>
+    </section>
   </div>
 </template>
 
@@ -82,9 +100,15 @@ const canSubmit = computed(() => {
   return capturedPhoto.value
 })
 
+const clearObjectUrl = (url) => {
+  if (url) URL.revokeObjectURL(url)
+}
+
 const handleFile = (e) => {
-  const f = e.target.files[0]
+  const f = e.target.files?.[0]
   if (f) {
+    clearObjectUrl(previewUrl.value)
+    clearObjectUrl(capturedPhoto.value)
     file.value = f
     previewUrl.value = URL.createObjectURL(f)
     capturedPhoto.value = null
@@ -96,9 +120,10 @@ const startCamera = async () => {
     stream = await navigator.mediaDevices.getUserMedia({ video: true })
     videoRef.value.srcObject = stream
     cameraActive.value = true
+    clearObjectUrl(capturedPhoto.value)
     capturedPhoto.value = null
   } catch {
-    ElMessage.error('无法启动摄像头，请检查权限')
+    ElMessage.error('无法启动摄像头，请检查浏览器权限')
   }
 }
 
@@ -123,9 +148,11 @@ const capturePhoto = () => {
 
   canvas.toBlob((blob) => {
     if (blob) {
+      clearObjectUrl(capturedPhoto.value)
       capturedPhoto.value = URL.createObjectURL(blob)
       file.value = new File([blob], 'capture.jpg', { type: 'image/jpeg' })
-      previewUrl.value = null
+      clearObjectUrl(previewUrl.value)
+      previewUrl.value = ''
       stopCamera()
       ElMessage.success('人脸照片已采集')
     }
@@ -151,117 +178,212 @@ const submit = async () => {
 
   try {
     await request.post('/register', formData)
-    ElMessage.success('注册成功')
+    ElMessage.success('登记成功')
     employee_id.value = ''
     name.value = ''
     email.value = ''
     department.value = ''
     file.value = null
+    clearObjectUrl(previewUrl.value)
+    clearObjectUrl(capturedPhoto.value)
     previewUrl.value = ''
     capturedPhoto.value = ''
   } catch (err) {
-    ElMessage.error(err.response?.data?.detail || '注册失败')
+    ElMessage.error(err.response?.data?.detail || '登记失败')
   }
 }
 
 onUnmounted(() => {
   stopCamera()
+  clearObjectUrl(previewUrl.value)
+  clearObjectUrl(capturedPhoto.value)
 })
 </script>
 
 <style scoped>
-.register-container {
-  display: flex;
-  justify-content: center;
-  padding: 40px 20px;
+.register-page {
+  max-width: 1040px;
+  margin: 0 auto;
 }
 
-.register-card {
-  width: 100%;
-  max-width: 500px;
-}
-
-.register-card h2 {
-  text-align: center;
-  margin-bottom: 24px;
-  color: #303133;
-}
-
-.face-source-section {
-  margin: 20px 0;
-  padding: 16px;
-  background: #f5f7fa;
+.page-shell {
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(37, 53, 68, 0.12);
   border-radius: 8px;
+  padding: 28px;
+  box-shadow: 0 10px 30px rgba(31, 46, 59, 0.08);
 }
 
-.section-title {
+.page-head {
+  margin-bottom: 22px;
+}
+
+.eyebrow {
+  color: #5a9ab8;
+  font-family: 'Oswald', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.page-head h2 {
+  margin: 6px 0 8px;
+  color: #1e3245;
+  font-size: 26px;
+}
+
+.page-head p {
+  color: #667582;
   font-size: 14px;
-  color: #606266;
-  margin-bottom: 12px;
+}
+
+.register-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.82fr) minmax(0, 1.18fr);
+  gap: 20px;
+}
+
+.panel-card {
+  border-radius: 8px;
+  border: 1px solid rgba(37, 53, 68, 0.1);
+}
+
+.panel-title {
+  color: #1e3245;
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+
+.info-form {
+  padding-top: 4px;
 }
 
 .source-tabs {
   margin-bottom: 16px;
 }
 
-.upload-section {
-  text-align: center;
+.capture-section {
+  min-height: 310px;
 }
 
-.file-input {
+.upload-box {
+  min-height: 310px;
+  border: 2px dashed #b8c3c9;
+  border-radius: 8px;
+  background: #f7f8f6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color .18s, background .18s;
+}
+
+.upload-box:hover {
+  border-color: #5a9ab8;
+  background: #f2f7f9;
+}
+
+.upload-box input {
+  display: none;
+}
+
+.upload-box img {
+  width: 100%;
+  height: 310px;
+  object-fit: contain;
+  background: #101820;
+}
+
+.upload-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: 1px solid #9fb1bc;
+  color: #5a7d90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
   margin-bottom: 12px;
 }
 
-.camera-section {
-  text-align: center;
+.upload-text {
+  color: #1e3245;
+  font-weight: 700;
+}
+
+.upload-tip {
+  color: #8a969c;
+  font-size: 12px;
+  margin-top: 6px;
 }
 
 .camera-wrapper {
-  width: 100%;
-  max-width: 320px;
-  margin: 0 auto 12px;
+  position: relative;
+  aspect-ratio: 16 / 10;
   border-radius: 8px;
   overflow: hidden;
-  background: #000;
+  background: #101820;
+  border: 1px solid #223545;
 }
 
 .camera-video {
   width: 100%;
+  height: 100%;
+  object-fit: cover;
   display: block;
 }
 
-.camera-controls {
+.camera-placeholder {
+  position: absolute;
+  inset: 0;
   display: flex;
-  gap: 10px;
+  align-items: center;
   justify-content: center;
-  margin-bottom: 12px;
+  color: #aebbc5;
+  background: #101820;
 }
 
-.preview-box {
-  max-width: 200px;
-  margin: 12px auto 0;
-  border: 2px dashed #dcdfe6;
-  border-radius: 8px;
-  padding: 8px;
-}
-
-.preview-box img {
-  width: 100%;
-  display: block;
-  border-radius: 4px;
-}
-
-.preview-box .tip {
-  text-align: center;
-  font-size: 12px;
-  color: #67c23a;
-  margin-top: 8px;
-}
-
+.camera-controls,
 .action-buttons {
   display: flex;
   gap: 12px;
-  justify-content: center;
-  margin-top: 24px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.preview-strip {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background: #effaf3;
+  border: 1px solid #9ed8b2;
+  color: #2d7a4f;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.preview-strip img {
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+@media (max-width: 820px) {
+  .page-shell {
+    padding: 20px;
+  }
+
+  .register-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
